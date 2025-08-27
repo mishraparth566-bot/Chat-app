@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Private Chat</title>
+    <script src="https://cdn.socket.io/4.3.2/socket.io.min.js"></script>
+</head>
+<body>
+    <h2>Welcome to the Private Chat Room</h2>
+
+    <div id="chatbox" style="border:1px solid #ccc; height:300px; overflow:auto; padding:10px;"></div>
+
+    <input id="message" placeholder="Type your message" style="width:70%;" />
+    <button onclick="sendMessage()">Send</button>
+
+    <script>
+        var socket = io();
+
+        socket.on('message', function(msg){
+            var chatbox = document.getElementById('chatbox');
+            chatbox.innerHTML += "<div>" + msg + "</div>";
+            chatbox.scrollTop = chatbox.scrollHeight;
+        });
+
+        function sendMessage(){
+            var msg = document.getElementById('message').value;
+            if(msg.trim() !== ""){
+                socket.send(msg);
+                document.getElementById('message').value = "";
+            }
+        }
+    </script>
+</body>
+</html>
