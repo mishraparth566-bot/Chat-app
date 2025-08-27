@@ -5,214 +5,115 @@
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <style>
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: #121212;
-            margin: 0;
-            padding: 0;
-            height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            color: #fff;
-        }
-
-        #chat-container {
-            width: 100%;
-            max-width: 500px;
-            height: 100vh;
-            display: flex;
-            flex-direction: column;
-            background: #1e1e1e;
-            border-radius: 0;
-            overflow: hidden;
-        }
-
-        #chat-header {
-            background: #1f1f1f;
-            color: #fff;
-            padding: 15px;
-            font-size: 18px;
-            font-weight: bold;
-            text-align: center;
-            flex-shrink: 0;
-            border-bottom: 1px solid #333;
-        }
-
-        #messages {
-            flex: 1;
-            padding: 15px;
-            overflow-y: auto;
-            display: flex;
-            flex-direction: column-reverse;
-            scroll-behavior: smooth;
-            background: #121212;
-        }
-
-        .message {
-            max-width: 75%;
-            padding: 10px 15px;
-            margin: 5px 0;
-            border-radius: 20px;
-            position: relative;
-            word-wrap: break-word;
-            font-size: 14px;
-            transition: all 0.3s ease;
-            color: #fff;
-        }
-
-        .self {
-            background: linear-gradient(120deg, #bc2a8d, #e95950);
-            align-self: flex-end;
-            text-align: right;
-        }
-
-        .other {
-            background: #2a2a2a;
-            align-self: flex-start;
-            text-align: left;
-        }
-
-        /* Bigger font for emoji-only messages */
-        .emoji-only {
-            font-size: 32px;
-            padding: 10px;
-        }
-
-        .timestamp {
-            display: block;
-            font-size: 10px;
-            color: #aaa;
-            margin-top: 3px;
-        }
-
-        #input-area {
-            display: flex;
-            padding: 8px;
-            border-top: 1px solid #333;
-            background: #1e1e1e;
-            gap: 5px;
-            flex-shrink: 0;
-        }
-
-        #username {
-            display: none;
-        }
-
-        #message {
-            flex: 1;
-            padding: 10px;
-            border-radius: 20px;
-            border: 1px solid #444;
-            font-size: 14px;
-            background: #2a2a2a;
-            color: #fff;
-        }
-
-        #send-btn {
-            flex: 0 0 auto;
-            padding: 10px 15px;
-            border: none;
-            background: #e95950;
-            color: white;
-            font-weight: bold;
-            border-radius: 50%;
-            cursor: pointer;
-            font-size: 16px;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-        }
-
-        #send-btn:hover {
-            background: #bc2a8d;
-        }
-
-        #messages::-webkit-scrollbar {
-            width: 6px;
-        }
-
-        #messages::-webkit-scrollbar-thumb {
-            background: rgba(255,255,255,0.2);
-            border-radius: 3px;
-        }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #121212; margin:0; padding:0; height:100vh; display:flex; justify-content:center; align-items:center; color:#fff; }
+        #chat-container { width:100%; max-width:500px; height:100vh; display:flex; flex-direction:column; background:#1e1e1e; overflow:hidden; }
+        #chat-header { background:#1f1f1f; color:#fff; padding:15px; font-size:18px; font-weight:bold; text-align:center; flex-shrink:0; border-bottom:1px solid #333; }
+        #messages { flex:1; padding:15px; overflow-y:auto; display:flex; flex-direction:column-reverse; scroll-behavior:smooth; background:#121212; }
+        .message { max-width:75%; padding:10px 15px; margin:5px 0; border-radius:20px; position:relative; word-wrap:break-word; font-size:14px; transition: all 0.3s ease; color:#fff; }
+        .self { background: linear-gradient(120deg, #bc2a8d, #e95950); align-self:flex-end; text-align:right; }
+        .other { background:#2a2a2a; align-self:flex-start; text-align:left; }
+        .emoji-only { font-size:32px; padding:10px; }
+        .timestamp { font-size:10px; color:#aaa; margin-left:5px; }
+        .receipt { font-size:10px; margin-left:3px; vertical-align:middle; }
+        #input-area { display:flex; padding:8px; border-top:1px solid #333; background:#1e1e1e; gap:5px; flex-shrink:0; }
+        #username { display:none; }
+        #message { flex:1; padding:10px; border-radius:20px; border:1px solid #444; font-size:14px; background:#2a2a2a; color:#fff; }
+        #send-btn { flex:0 0 auto; padding:10px 15px; border:none; background:#e95950; color:white; font-weight:bold; border-radius:50%; cursor:pointer; font-size:16px; display:flex; justify-content:center; align-items:center; }
+        #send-btn:hover { background:#bc2a8d; }
+        #messages::-webkit-scrollbar { width:6px; }
+        #messages::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius:3px; }
     </style>
 </head>
 <body>
-    <div id="chat-container">
-        <div id="chat-header">Private Chat Room</div>
-        <div id="messages"></div>
-        <div id="input-area">
-            <input id="username" placeholder="Your name" />
-            <input id="message" placeholder="Type a message..." autocomplete="off"/>
-            <button id="send-btn">&#9658;</button>
-        </div>
+<div id="chat-container">
+    <div id="chat-header">Private Chat Room</div>
+    <div id="messages"></div>
+    <div id="input-area">
+        <input id="username" placeholder="Your name" />
+        <input id="message" placeholder="Type a message..." autocomplete="off"/>
+        <button id="send-btn">&#9658;</button>
     </div>
+</div>
 
-    <script>
-        var socket = io();
-        var selfName = "You";
+<script>
+    var socket = io();
+    var selfName = "You";
+    var msgCounter = 0;
 
-        function getTime() {
-            const now = new Date();
-            return now.getHours().toString().padStart(2, '0') + ':' +
-                   now.getMinutes().toString().padStart(2, '0');
+    function getTime() {
+        const now = new Date();
+        return now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0');
+    }
+
+    function scrollToBottom() {
+        var messages = document.getElementById('messages');
+        messages.scrollTop = 0;
+    }
+
+    function isEmojiOnly(text) {
+        const trimmed = text.trim();
+        const emojiRegex = /^[\p{Emoji}\u200d]+$/u;
+        return emojiRegex.test(trimmed);
+    }
+
+    function createMessageDiv(msg, isSelf, status="sent") {
+        var div = document.createElement('div');
+        div.classList.add('message');
+        div.id = msg.id;
+        div.classList.add(isSelf ? 'self' : 'other');
+        if(isEmojiOnly(msg.text)) div.classList.add('emoji-only');
+        var receipt = '';
+        if(isSelf){
+            if(status==="sent") receipt='<span class="receipt">&#10003;</span>';
+            if(status==="received") receipt='<span class="receipt">&#10003;&#10003;</span>';
+            if(status==="read") receipt='<span class="receipt" style="color:#4fc3f7;">&#10003;&#10003;</span>';
         }
+        div.innerHTML = `${msg.text}<span class="timestamp">${msg.time}</span>${receipt}`;
+        return div;
+    }
 
-        function scrollToBottom() {
+    document.getElementById('send-btn').onclick = function(){
+        var input = document.getElementById('message');
+        var msgText = input.value.trim();
+        if(msgText!==""){
+            var msg = {id:"msg_"+msgCounter++, user:selfName, text:msgText, time:getTime()};
             var messages = document.getElementById('messages');
-            messages.scrollTop = 0;
-        }
-
-        function isEmojiOnly(text) {
-            // Remove spaces and check if text contains only emojis
-            const trimmed = text.trim();
-            // Regex for most emojis
-            const emojiRegex = /^[\p{Emoji}\u200d]+$/u;
-            return emojiRegex.test(trimmed);
-        }
-
-        document.getElementById('send-btn').onclick = function() {
-            var input = document.getElementById('message');
-            var msg = input.value.trim();
-            if(msg !== ""){
-                socket.send({user: selfName, text: msg, time: getTime()});
-                input.value = "";
-            }
-        };
-
-        document.getElementById('message').addEventListener('keypress', function(e){
-            if(e.key === 'Enter') document.getElementById('send-btn').click();
-        });
-
-        socket.on('message', function(msg){
-            var messages = document.getElementById('messages');
-            var div = document.createElement('div');
-            div.classList.add('message');
-
-            if(msg.user === selfName){
-                div.classList.add('self');
-            } else {
-                div.classList.add('other');
-            }
-
-            if(isEmojiOnly(msg.text)) {
-                div.classList.add('emoji-only');
-            }
-
-            div.innerHTML = `${msg.text}<span class="timestamp">${msg.time}</span>`;
-            messages.prepend(div);
+            messages.prepend(createMessageDiv(msg,true,"sent"));
             scrollToBottom();
-        });
+            input.value="";
+            socket.emit('send_message', msg);
+        }
+    };
 
-        // Adjust chat height when mobile keyboard opens
-        window.addEventListener('resize', function() {
-            var chatContainer = document.getElementById('chat-container');
-            chatContainer.style.height = window.innerHeight + 'px';
-            scrollToBottom();
-        });
+    document.getElementById('message').addEventListener('keypress',function(e){
+        if(e.key==='Enter') document.getElementById('send-btn').click();
+    });
 
+    socket.on('message_received', function(msg){
+        var messages = document.getElementById('messages');
+        messages.prepend(createMessageDiv(msg,false));
         scrollToBottom();
-    </script>
+        // Notify sender that message is read when displayed
+        socket.emit('message_read', {id: msg.id});
+    });
+
+    socket.on('update_status', function(update){
+        var msgDiv = document.getElementById(update.msg_id);
+        if(msgDiv){
+            var receipt = '';
+            if(update.status==='received') receipt='<span class="receipt">&#10003;&#10003;</span>';
+            if(update.status==='read') receipt='<span class="receipt" style="color:#4fc3f7;">&#10003;&#10003;</span>';
+            msgDiv.querySelector('.receipt').outerHTML = receipt;
+        }
+    });
+
+    window.addEventListener('resize', function(){
+        var chatContainer = document.getElementById('chat-container');
+        chatContainer.style.height = window.innerHeight + 'px';
+        scrollToBottom();
+    });
+
+    scrollToBottom();
+</script>
 </body>
 </html>
