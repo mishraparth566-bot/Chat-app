@@ -5,99 +5,123 @@
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <style>
         body {
-            font-family: Arial, sans-serif;
-            background: #f5f5f5;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #ece5dd;
             display: flex;
-            flex-direction: column;
+            justify-content: center;
             align-items: center;
-            margin: 0;
             height: 100vh;
-        }
-
-        h2 {
-            margin-top: 20px;
-            color: #333;
+            margin: 0;
         }
 
         #chat-container {
+            width: 100%;
+            max-width: 500px;
+            height: 90%;
             display: flex;
             flex-direction: column;
-            width: 90%;
-            max-width: 600px;
-            height: 70%;
-            border: 1px solid #ccc;
+            background: #f0f0f0;
             border-radius: 10px;
-            background: #fff;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
             overflow: hidden;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        }
+
+        #chat-header {
+            background: #075e54;
+            color: white;
+            padding: 15px;
+            font-size: 18px;
+            font-weight: bold;
+            text-align: center;
         }
 
         #messages {
             flex: 1;
-            padding: 10px;
+            padding: 15px;
             overflow-y: auto;
+            display: flex;
+            flex-direction: column;
         }
 
         .message {
+            max-width: 75%;
+            padding: 10px 15px;
             margin: 5px 0;
-            padding: 8px 12px;
-            border-radius: 12px;
-            max-width: 80%;
+            border-radius: 20px;
+            position: relative;
             word-wrap: break-word;
+            font-size: 14px;
         }
 
         .self {
-            background: #b2dfdb;
+            background: linear-gradient(120deg, #dcf8c6, #b2f2bb);
             align-self: flex-end;
+            text-align: right;
         }
 
         .other {
-            background: #e0f7fa;
+            background: linear-gradient(120deg, #ffffff, #e6e6e6);
             align-self: flex-start;
+            text-align: left;
+        }
+
+        .timestamp {
+            display: block;
+            font-size: 10px;
+            color: #555;
+            margin-top: 3px;
         }
 
         #input-area {
             display: flex;
+            padding: 10px;
             border-top: 1px solid #ccc;
+            background: #f0f0f0;
+            gap: 5px;
+            flex-wrap: wrap;
         }
 
         #username {
-            width: 25%;
+            flex: 1 0 25%;
+            min-width: 70px;
             padding: 10px;
-            border: none;
+            border: 1px solid #ccc;
+            border-radius: 20px;
             font-size: 14px;
-            border-right: 1px solid #ccc;
         }
 
         #message {
-            flex: 1;
+            flex: 2 0 50%;
+            min-width: 120px;
             padding: 10px;
-            border: none;
-            font-size: 16px;
+            border-radius: 20px;
+            border: 1px solid #ccc;
+            font-size: 14px;
         }
 
         #send-btn {
-            padding: 10px 20px;
+            flex: 0 0 auto;
+            padding: 10px 15px;
             border: none;
-            background: #00796b;
+            background: #25d366;
             color: white;
+            font-weight: bold;
+            border-radius: 20px;
             cursor: pointer;
-            font-size: 16px;
         }
 
         #send-btn:hover {
-            background: #004d40;
+            background: #128c7e;
         }
     </style>
 </head>
 <body>
-    <h2>Private Chat Room</h2>
-
     <div id="chat-container">
+        <div id="chat-header">Private Chat Room</div>
         <div id="messages"></div>
         <div id="input-area">
             <input id="username" placeholder="Your name" />
-            <input id="message" placeholder="Type your message..." autocomplete="off"/>
+            <input id="message" placeholder="Type a message..." autocomplete="off"/>
             <button id="send-btn">Send</button>
         </div>
     </div>
@@ -105,6 +129,12 @@
     <script>
         var socket = io();
         var selfName = "";
+
+        function getTime() {
+            const now = new Date();
+            return now.getHours().toString().padStart(2, '0') + ':' +
+                   now.getMinutes().toString().padStart(2, '0');
+        }
 
         document.getElementById('send-btn').onclick = function() {
             var input = document.getElementById('message');
@@ -114,13 +144,12 @@
             var username = userInput.value.trim() || "Anonymous";
 
             if(msg !== ""){
-                selfName = username;  // store self name
-                socket.send({user: username, text: msg});
+                selfName = username;
+                socket.send({user: username, text: msg, time: getTime()});
                 input.value = "";
             }
         };
 
-        // allow Enter key to send message
         document.getElementById('message').addEventListener('keypress', function(e){
             if(e.key === 'Enter') document.getElementById('send-btn').click();
         });
@@ -136,7 +165,7 @@
                 div.classList.add('other');
             }
 
-            div.textContent = msg.user + ": " + msg.text;
+            div.innerHTML = `<strong>${msg.user}</strong><br>${msg.text}<span class="timestamp">${msg.time}</span>`;
             messages.appendChild(div);
             messages.scrollTop = messages.scrollHeight;
         });
