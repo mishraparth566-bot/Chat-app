@@ -1,10 +1,10 @@
+import eventlet
+eventlet.monkey_patch()   # must be first
+
 from flask import Flask, render_template, request
 from flask_socketio import SocketIO, emit
-from tinydb import TinyDB, Query
+from tinydb import TinyDB
 from datetime import datetime
-import eventlet
-
-eventlet.monkey_patch()
 
 app = Flask(__name__)
 socketio = SocketIO(app, cors_allowed_origins="*")
