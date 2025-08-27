@@ -3,68 +3,69 @@
 <head>
     <title>Private Chat Room</title>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <style>
         body {
-            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-            background: #e6ecf0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #ece5dd;
+            margin: 0;
+            padding: 0;
+            height: 100vh;
             display: flex;
             justify-content: center;
             align-items: center;
-            height: 100vh;
-            margin: 0;
         }
 
         #chat-container {
             width: 100%;
-            max-width: 450px;
-            aspect-ratio: 1 / 2.4; /* width:height = 1:2.4 */
+            max-width: 500px;
+            height: 100vh;
             display: flex;
             flex-direction: column;
-            background: #ffffff;
-            border-radius: 15px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            background: #f0f0f0;
+            border-radius: 0;
             overflow: hidden;
         }
 
         #chat-header {
-            background: #ffffff;
-            color: #2c3e50;
-            padding: 12px 15px;
-            font-size: 16px;
+            background: #075e54;
+            color: white;
+            padding: 15px;
+            font-size: 18px;
             font-weight: bold;
             text-align: center;
-            border-bottom: 1px solid #ccc;
+            flex-shrink: 0;
         }
 
         #messages {
             flex: 1;
-            padding: 12px;
+            padding: 15px;
             overflow-y: auto;
             display: flex;
-            flex-direction: column;
+            flex-direction: column-reverse; /* newest messages at bottom */
             scroll-behavior: smooth;
-            background: #f5f5f5;
+            background: #ece5dd;
         }
 
         .message {
             max-width: 75%;
-            padding: 8px 12px;
-            margin: 4px 0;
-            border-radius: 18px;
+            padding: 10px 15px;
+            margin: 5px 0;
+            border-radius: 20px;
             position: relative;
             word-wrap: break-word;
             font-size: 14px;
-            line-height: 1.4;
+            transition: all 0.3s ease;
         }
 
         .self {
-            background: #dcf8c6;
+            background: linear-gradient(120deg, #dcf8c6, #b2f2bb);
             align-self: flex-end;
             text-align: right;
         }
 
         .other {
-            background: #ffffff;
+            background: linear-gradient(120deg, #ffffff, #e6e6e6);
             align-self: flex-start;
             text-align: left;
         }
@@ -72,26 +73,26 @@
         .timestamp {
             display: block;
             font-size: 10px;
-            color: #999;
-            margin-top: 2px;
+            color: #555;
+            margin-top: 3px;
         }
 
         #input-area {
             display: flex;
-            padding: 10px;
+            padding: 8px;
             border-top: 1px solid #ccc;
-            background: #ffffff;
-            gap: 6px;
-            align-items: center;
+            background: #f0f0f0;
+            gap: 5px;
+            flex-shrink: 0;
         }
 
         #username {
-            display: none; /* hide username input to mimic Telegram simplicity */
+            display: none; /* hide username input */
         }
 
         #message {
             flex: 1;
-            padding: 10px 15px;
+            padding: 10px;
             border-radius: 20px;
             border: 1px solid #ccc;
             font-size: 14px;
@@ -99,9 +100,9 @@
 
         #send-btn {
             flex: 0 0 auto;
-            padding: 10px 14px;
+            padding: 10px 15px;
             border: none;
-            background: #1e90ff;
+            background: #25d366;
             color: white;
             font-weight: bold;
             border-radius: 50%;
@@ -113,7 +114,7 @@
         }
 
         #send-btn:hover {
-            background: #0f75d4;
+            background: #128c7e;
         }
 
         /* Scrollbar styling */
@@ -129,7 +130,7 @@
 </head>
 <body>
     <div id="chat-container">
-        <div id="chat-header">Private Chat</div>
+        <div id="chat-header">Private Chat Room</div>
         <div id="messages"></div>
         <div id="input-area">
             <input id="username" placeholder="Your name" />
@@ -146,6 +147,11 @@
             const now = new Date();
             return now.getHours().toString().padStart(2, '0') + ':' +
                    now.getMinutes().toString().padStart(2, '0');
+        }
+
+        function scrollToBottom() {
+            var messages = document.getElementById('messages');
+            messages.scrollTop = 0; // because of column-reverse
         }
 
         document.getElementById('send-btn').onclick = function() {
@@ -173,9 +179,19 @@
             }
 
             div.innerHTML = `<strong>${msg.user}</strong><br>${msg.text}<span class="timestamp">${msg.time}</span>`;
-            messages.appendChild(div);
-            messages.scrollTop = messages.scrollHeight;
+            messages.prepend(div); // prepend because of column-reverse
+            scrollToBottom();
         });
+
+        // Adjust chat height when mobile keyboard opens
+        window.addEventListener('resize', function() {
+            var chatContainer = document.getElementById('chat-container');
+            chatContainer.style.height = window.innerHeight + 'px';
+            scrollToBottom();
+        });
+
+        // Initial scroll
+        scrollToBottom();
     </script>
 </body>
 </html>
