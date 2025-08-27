@@ -38,13 +38,22 @@
             overflow-y: auto;
         }
 
-        #messages div {
+        .message {
             margin: 5px 0;
             padding: 8px 12px;
-            background: #e0f7fa;
-            border-radius: 8px;
+            border-radius: 12px;
             max-width: 80%;
             word-wrap: break-word;
+        }
+
+        .self {
+            background: #b2dfdb;
+            align-self: flex-end;
+        }
+
+        .other {
+            background: #e0f7fa;
+            align-self: flex-start;
         }
 
         #input-area {
@@ -52,11 +61,18 @@
             border-top: 1px solid #ccc;
         }
 
+        #username {
+            width: 25%;
+            padding: 10px;
+            border: none;
+            font-size: 14px;
+            border-right: 1px solid #ccc;
+        }
+
         #message {
             flex: 1;
             padding: 10px;
             border: none;
-            border-radius: 0;
             font-size: 16px;
         }
 
@@ -80,6 +96,7 @@
     <div id="chat-container">
         <div id="messages"></div>
         <div id="input-area">
+            <input id="username" placeholder="Your name" />
             <input id="message" placeholder="Type your message..." autocomplete="off"/>
             <button id="send-btn">Send</button>
         </div>
@@ -88,19 +105,18 @@
     <script>
         var socket = io();
 
-        socket.on('message', function(msg){
-            var messages = document.getElementById('messages');
-            var div = document.createElement('div');
-            div.textContent = msg;
-            messages.appendChild(div);
-            messages.scrollTop = messages.scrollHeight;  // auto-scroll
-        });
+        var selfName = "";
 
         document.getElementById('send-btn').onclick = function() {
             var input = document.getElementById('message');
+            var userInput = document.getElementById('username');
+
             var msg = input.value.trim();
+            var username = userInput.value.trim() || "Anonymous";
+
             if(msg !== ""){
-                socket.send(msg);
+                selfName = username;  // store self name
+                socket.send({user: username, text: msg});
                 input.value = "";
             }
         };
@@ -108,6 +124,22 @@
         // allow Enter key to send message
         document.getElementById('message').addEventListener('keypress', function(e){
             if(e.key === 'Enter') document.getElementById('send-btn').click();
+        });
+
+        socket.on('message', function(msg){
+            var messages = document.getElementById('messages');
+            var div = document.createElement('div');
+            div.classList.add('message');
+
+            if(msg.user === selfName){
+                div.classList.add('self');
+            } else {
+                div.classList.add('other');
+            }
+
+            div.textContent = msg.user + ": " + msg.text;
+            messages.appendChild(div);
+            messages.scrollTop = messages.scrollHeight;
         });
     </script>
 </body>
