@@ -7,13 +7,14 @@
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: #ece5dd;
+            background: #121212;
             margin: 0;
             padding: 0;
             height: 100vh;
             display: flex;
             justify-content: center;
             align-items: center;
+            color: #fff;
         }
 
         #chat-container {
@@ -22,19 +23,20 @@
             height: 100vh;
             display: flex;
             flex-direction: column;
-            background: #f0f0f0;
+            background: #1e1e1e;
             border-radius: 0;
             overflow: hidden;
         }
 
         #chat-header {
-            background: #075e54;
-            color: white;
+            background: #1f1f1f;
+            color: #fff;
             padding: 15px;
             font-size: 18px;
             font-weight: bold;
             text-align: center;
             flex-shrink: 0;
+            border-bottom: 1px solid #333;
         }
 
         #messages {
@@ -44,7 +46,7 @@
             display: flex;
             flex-direction: column-reverse; /* newest messages at bottom */
             scroll-behavior: smooth;
-            background: #ece5dd;
+            background: #121212;
         }
 
         .message {
@@ -56,16 +58,17 @@
             word-wrap: break-word;
             font-size: 14px;
             transition: all 0.3s ease;
+            color: #fff;
         }
 
         .self {
-            background: linear-gradient(120deg, #dcf8c6, #b2f2bb);
+            background: linear-gradient(120deg, #bc2a8d, #e95950);
             align-self: flex-end;
             text-align: right;
         }
 
         .other {
-            background: linear-gradient(120deg, #ffffff, #e6e6e6);
+            background: #2a2a2a;
             align-self: flex-start;
             text-align: left;
         }
@@ -73,15 +76,15 @@
         .timestamp {
             display: block;
             font-size: 10px;
-            color: #555;
+            color: #aaa;
             margin-top: 3px;
         }
 
         #input-area {
             display: flex;
             padding: 8px;
-            border-top: 1px solid #ccc;
-            background: #f0f0f0;
+            border-top: 1px solid #333;
+            background: #1e1e1e;
             gap: 5px;
             flex-shrink: 0;
         }
@@ -94,15 +97,17 @@
             flex: 1;
             padding: 10px;
             border-radius: 20px;
-            border: 1px solid #ccc;
+            border: 1px solid #444;
             font-size: 14px;
+            background: #2a2a2a;
+            color: #fff;
         }
 
         #send-btn {
             flex: 0 0 auto;
             padding: 10px 15px;
             border: none;
-            background: #25d366;
+            background: #e95950;
             color: white;
             font-weight: bold;
             border-radius: 50%;
@@ -114,7 +119,7 @@
         }
 
         #send-btn:hover {
-            background: #128c7e;
+            background: #bc2a8d;
         }
 
         /* Scrollbar styling */
@@ -123,7 +128,7 @@
         }
 
         #messages::-webkit-scrollbar-thumb {
-            background: rgba(0,0,0,0.2);
+            background: rgba(255,255,255,0.2);
             border-radius: 3px;
         }
     </style>
@@ -179,7 +184,7 @@
             }
 
             div.innerHTML = `<strong>${msg.user}</strong><br>${msg.text}<span class="timestamp">${msg.time}</span>`;
-            messages.prepend(div); // prepend because of column-reverse
+            messages.prepend(div); // newest message appears near typing bar
             scrollToBottom();
         });
 
