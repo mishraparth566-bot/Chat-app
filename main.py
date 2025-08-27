@@ -1,51 +1,37 @@
 from flask import Flask, render_template, request
 from flask_socketio import SocketIO, emit
-from tinydb import TinyDB
+from tinydb import TinyDB, Query
+from datetime import datetime
+import eventlet
+
+eventlet.monkey_patch()
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'secret!'
-socketio = SocketIO(app)
+socketio = SocketIO(app, cors_allowed_origins="*")
 
-db = TinyDB('chat.json')
-clients = {}  # key: sid, value: username
+# setup TinyDB database
+db = TinyDB("chat_db.json")
 
-@app.route('/')
+@app.route("/")
 def index():
-    return render_template('index.html')
+    # load all past messages from DB
+    messages = db.all()
+    return render_template("index.html", messages=messages)
 
-@app.route('/messages')
-def get_messages():
-    return {'messages': db.all()}
+@socketio.on("send_message")
+def handle_message(data):
+    message = {
+        "user": data["user"],
+        "msg": data["msg"],
+        "timestamp": datetime.now().strftime("%H:%M"),
+        "status": "sent"  # default stage
+    }
 
-@socketio.on('connect')
-def handle_connect():
-    clients[request.sid] = "User"
-    emit('update_online', list(clients.values()), broadcast=True)
+    # save in DB
+    db.insert(message)
 
-@socketio.on('disconnect')
-def handle_disconnect():
-    if request.sid in clients:
-        del clients[request.sid]
-        emit('update_online', list(clients.values()), broadcast=True)
+    # broadcast to all users
+    emit("receive_message", message, broadcast=True)
 
-@socketio.on('set_name')
-def handle_set_name(name):
-    clients[request.sid] = name
-    emit('update_online', list(clients.values()), broadcast=True)
-
-@socketio.on('send_message')
-def handle_send_message(msg):
-    db.insert(msg)
-    emit('message_received', msg, broadcast=True, include_self=False)
-    emit('update_status', {'msg_id': msg['id'], 'status':'received'}, to=request.sid)
-
-@socketio.on('message_read')
-def handle_message_read(msg):
-    emit('update_status', {'msg_id': msg['id'], 'status':'read'}, broadcast=True, include_self=False)
-
-@socketio.on('typing')
-def handle_typing(data):
-    emit('show_typing', data, broadcast=True, include_self=False)
-
-if __name__ == '__main__':
-    socketio.run(app, debug=True)
+if __name__ == "__main__":
+    socketio.run(app, host="0.0.0.0", port=10000)
