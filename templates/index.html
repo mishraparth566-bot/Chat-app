@@ -26,34 +26,32 @@
       display: flex;
       margin: 4px 0;
     }
-    .message.sent {
-      justify-content: flex-end;
-    }
-    .message.received {
-      justify-content: flex-start;
-    }
+    .message.sent { justify-content: flex-end; }
+    .message.received { justify-content: flex-start; }
     .bubble {
       max-width: 70%;
       padding: 10px;
       border-radius: 20px;
-      position: relative;
       word-wrap: break-word;
       font-size: 15px;
+      position: relative;
     }
     .sent .bubble {
-      background-color: #3797EF; /* Instagram blue */
+      background-color: #3797EF;
       color: white;
       border-bottom-right-radius: 5px;
     }
     .received .bubble {
-      background-color: #262626; /* Instagram dark grey */
+      background-color: #262626;
       color: white;
       border-bottom-left-radius: 5px;
     }
-    .timestamp {
+    .meta {
+      display: flex;
+      justify-content: flex-end;
       font-size: 10px;
       opacity: 0.7;
-      margin-left: 6px;
+      margin-top: 3px;
     }
     #input-area {
       display: flex;
@@ -84,10 +82,13 @@
 <body>
   <div id="chat-box">
     {% for msg in messages %}
-      <div class="message {% if msg.user == 'You' %}sent{% else %}received{% endif %}">
+      <div class="message {% if msg.user == 'You' %}sent{% else %}received{% endif %}" id="msg-{{ msg.id }}">
         <div class="bubble">
           {{ msg.msg }}
-          <span class="timestamp">{{ msg.timestamp }}</span>
+          <div class="meta">
+            <span>{{ msg.timestamp }}</span>
+            <span class="status">{{ "✓" if msg.status=="sent" else ("✓✓" if msg.status=="delivered" else "✓✓" ) }}</span>
+          </div>
         </div>
       </div>
     {% endfor %}
@@ -101,40 +102,60 @@
   <script>
     var socket = io();
 
+    function renderStatus(status) {
+      if (status === "sent") return "✓";
+      if (status === "delivered") return "✓✓";
+      if (status === "read") return "<span style='color:#3797EF'>✓✓</span>";
+      return "";
+    }
+
+    function addMessage(data, local=false) {
+      let chatBox = document.getElementById("chat-box");
+      let msgDiv = document.createElement("div");
+      msgDiv.className = "message " + (data.user === "You" ? "sent" : "received");
+      msgDiv.id = "msg-" + data.id;
+      msgDiv.innerHTML = `
+        <div class="bubble">
+          ${data.msg}
+          <div class="meta">
+            <span>${data.timestamp}</span>
+            <span class="status">${renderStatus(data.status)}</span>
+          </div>
+        </div>
+      `;
+      chatBox.appendChild(msgDiv);
+      chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
     // Send message
     document.getElementById("send-btn").onclick = function() {
       let msg = document.getElementById("message-input").value;
       if (msg.trim() !== "") {
+        let tempId = Date.now().toString();
+        let tempData = { id: tempId, user: "You", msg: msg, timestamp: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}), status: "sent" };
+        addMessage(tempData, true);
         socket.emit("send_message", { user: "You", msg: msg });
         document.getElementById("message-input").value = "";
       }
     };
 
-    // Receive message
+    // Receive from server
     socket.on("receive_message", function(data) {
-      addMessageToUI(data);
+      addMessage(data);
+      if (data.user !== "You") {
+        // mark delivered instantly
+        socket.emit("update_status", {id: data.id, status: "delivered"});
+        // simulate read after 2 sec
+        setTimeout(() => {
+          socket.emit("update_status", {id: data.id, status: "read"});
+        }, 2000);
+      }
     });
 
-    function addMessageToUI(data) {
-      let chatBox = document.getElementById("chat-box");
-      let msgDiv = document.createElement("div");
-
-      if (data.user === "You") {
-        msgDiv.className = "message sent";
-      } else {
-        msgDiv.className = "message received";
-      }
-
-      msgDiv.innerHTML = `
-        <div class="bubble">
-          ${data.msg}
-          <span class="timestamp">${data.timestamp}</span>
-        </div>
-      `;
-
-      chatBox.appendChild(msgDiv);
-      chatBox.scrollTop = chatBox.scrollHeight;
-    }
+    socket.on("status_update", function(data) {
+      let el = document.querySelector(`#msg-${data.id} .status`);
+      if (el) el.innerHTML = renderStatus(data.status);
+    });
   </script>
 </body>
 </html>
