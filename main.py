@@ -1,80 +1,69 @@
 import eventlet
-eventlet.monkey_patch()   # MUST be the very first thing
+eventlet.monkey_patch()
 
-from flask import Flask, render_template, jsonify, request
-from flask_socketio import SocketIO
-from tinydb import TinyDB, Query
+from flask import Flask, render_template, request
+from flask_socketio import SocketIO, emit, join_room
+from tinydb import TinyDB
 from datetime import datetime
-import uuid
 
 app = Flask(__name__)
-socketio = SocketIO(app, cors_allowed_origins="*")
+app.config['SECRET_KEY'] = 'secret!'
+socketio = SocketIO(app, async_mode='eventlet')
 
-# TinyDB store
-db = TinyDB("chat_db.json")
+# Database
+db = TinyDB('chat.json')
+messages_table = db.table('messages')
 
-@app.route("/")
+online_users = set()
+
+@app.route('/')
 def index():
-    return render_template("index.html")
+    return render_template('index.html')
 
-@app.route("/messages")
-def get_messages():
-    # return all stored messages as JSON
-    return jsonify(db.all())
+@socketio.on('connect')
+def handle_connect():
+    username = request.sid
+    online_users.add(username)
+    emit('status', {'msg': 'A user is online'}, broadcast=True)
 
-@socketio.on("send_message")
-def handle_send_message(data):
-    """
-    Expected data from client:
-    { client_id: <string>, user: <string>, text: <string>, time: <string> }
-    """
-    client_id = data.get("client_id")
-    user = data.get("user", "Anonymous")
-    text = data.get("text", "")
-    time = data.get("time") or datetime.now().strftime("%H:%M")
+    # Send chat history to newly connected user
+    history = messages_table.all()
+    emit('chat_history', history)
 
-    # create server id
-    server_id = str(uuid.uuid4())
+@socketio.on('disconnect')
+def handle_disconnect():
+    username = request.sid
+    if username in online_users:
+        online_users.remove(username)
+    emit('status', {'msg': 'A user went offline'}, broadcast=True)
 
-    # build canonical message
+@socketio.on('send_message')
+def handle_message(data):
+    msg_text = data['msg']
+    username = data.get('username', 'User')
+
+    timestamp = datetime.now().strftime("%H:%M")
+
     message = {
-        "id": server_id,
-        "client_id": client_id,
-        "user": user,
-        "text": text,
-        "time": time,
-        "status": "sent"  # initial status
+        'username': username,
+        'msg': msg_text,
+        'timestamp': timestamp,
+        'status': 'sent'
     }
 
-    # persist message
-    db.insert(message)
+    # Save in DB
+    messages_table.insert(message)
 
-    # broadcast the message to all OTHER clients (not the sender)
-    socketio.emit("receive_message", message, broadcast=True, include_self=False)
+    # Broadcast to all clients
+    emit('receive_message', message, broadcast=True)
 
-    # notify the sender that message was accepted & mapped -> delivered (server side)
-    # include client_id so the sender can match its temp message element
-    socketio.emit("status_update", {
-        "client_id": client_id,
-        "server_id": server_id,
-        "status": "delivered"
-    }, to=request.sid)
+@socketio.on('update_status')
+def update_status(data):
+    # Update read receipts (dummy simulation)
+    msg_id = data.get('id')
+    status = data.get('status')
+    # In real DB you’d update specific message, TinyDB can too if needed
+    emit('status_update', {'id': msg_id, 'status': status}, broadcast=True)
 
-@socketio.on("message_read")
-def handle_message_read(data):
-    """
-    data: { id: <server_id> }
-    When a client reads (renders) a message, update DB and notify everyone.
-    """
-    server_id = data.get("id")
-    if not server_id:
-        return
-
-    Message = Query()
-    db.update({"status": "read"}, Message.id == server_id)
-
-    # broadcast read status to all (so sender sees blue ticks)
-    socketio.emit("status_update", {"server_id": server_id, "status": "read"}, broadcast=True)
-
-if __name__ == "__main__":
-    socketio.run(app, host="0.0.0.0", port=10000, debug=True)
+if __name__ == '__main__':
+    socketio.run(app, host='0.0.0.0', port=5000)
