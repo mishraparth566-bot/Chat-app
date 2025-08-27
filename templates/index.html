@@ -44,7 +44,7 @@
             padding: 15px;
             overflow-y: auto;
             display: flex;
-            flex-direction: column-reverse; /* newest messages at bottom */
+            flex-direction: column-reverse;
             scroll-behavior: smooth;
             background: #121212;
         }
@@ -73,6 +73,12 @@
             text-align: left;
         }
 
+        /* Bigger font for emoji-only messages */
+        .emoji-only {
+            font-size: 32px;
+            padding: 10px;
+        }
+
         .timestamp {
             display: block;
             font-size: 10px;
@@ -90,7 +96,7 @@
         }
 
         #username {
-            display: none; /* hide username input */
+            display: none;
         }
 
         #message {
@@ -122,7 +128,6 @@
             background: #bc2a8d;
         }
 
-        /* Scrollbar styling */
         #messages::-webkit-scrollbar {
             width: 6px;
         }
@@ -156,7 +161,15 @@
 
         function scrollToBottom() {
             var messages = document.getElementById('messages');
-            messages.scrollTop = 0; // because of column-reverse
+            messages.scrollTop = 0;
+        }
+
+        function isEmojiOnly(text) {
+            // Remove spaces and check if text contains only emojis
+            const trimmed = text.trim();
+            // Regex for most emojis
+            const emojiRegex = /^[\p{Emoji}\u200d]+$/u;
+            return emojiRegex.test(trimmed);
         }
 
         document.getElementById('send-btn').onclick = function() {
@@ -183,8 +196,12 @@
                 div.classList.add('other');
             }
 
-            div.innerHTML = `<strong>${msg.user}</strong><br>${msg.text}<span class="timestamp">${msg.time}</span>`;
-            messages.prepend(div); // newest message appears near typing bar
+            if(isEmojiOnly(msg.text)) {
+                div.classList.add('emoji-only');
+            }
+
+            div.innerHTML = `${msg.text}<span class="timestamp">${msg.time}</span>`;
+            messages.prepend(div);
             scrollToBottom();
         });
 
@@ -195,7 +212,6 @@
             scrollToBottom();
         });
 
-        // Initial scroll
         scrollToBottom();
     </script>
 </body>
