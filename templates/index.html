@@ -5,7 +5,7 @@
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #121212; margin:0; padding:0; height:100vh; display:flex; justify-content:center; align-items:center; color:#fff; }
+        body { font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background:#121212; margin:0; padding:0; height:100vh; display:flex; justify-content:center; align-items:center; color:#fff; }
         #chat-container { width:100%; max-width:500px; height:100vh; display:flex; flex-direction:column; background:#1e1e1e; overflow:hidden; }
         #chat-header { background:#1f1f1f; color:#fff; padding:15px; font-size:18px; font-weight:bold; text-align:center; flex-shrink:0; border-bottom:1px solid #333; }
         #messages { flex:1; padding:15px; overflow-y:auto; display:flex; flex-direction:column-reverse; scroll-behavior:smooth; background:#121212; }
@@ -62,15 +62,27 @@
         div.id = msg.id;
         div.classList.add(isSelf ? 'self' : 'other');
         if(isEmojiOnly(msg.text)) div.classList.add('emoji-only');
+
         var receipt = '';
         if(isSelf){
             if(status==="sent") receipt='<span class="receipt">&#10003;</span>';
             if(status==="received") receipt='<span class="receipt">&#10003;&#10003;</span>';
             if(status==="read") receipt='<span class="receipt" style="color:#4fc3f7;">&#10003;&#10003;</span>';
         }
+
         div.innerHTML = `${msg.text}<span class="timestamp">${msg.time}</span>${receipt}`;
         return div;
     }
+
+    // Load persistent messages
+    fetch('/messages')
+      .then(res => res.json())
+      .then(data => {
+          data.messages.reverse().forEach(msg => {
+              var isSelf = msg.user === selfName;
+              document.getElementById('messages').prepend(createMessageDiv(msg,isSelf,"read"));
+          });
+      });
 
     document.getElementById('send-btn').onclick = function(){
         var input = document.getElementById('message');
