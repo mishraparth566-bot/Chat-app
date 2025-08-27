@@ -5,8 +5,8 @@
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <style>
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: #ece5dd;
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            background: #e6ecf0;
             display: flex;
             justify-content: center;
             align-items: center;
@@ -16,29 +16,166 @@
 
         #chat-container {
             width: 100%;
-            max-width: 500px;
-            aspect-ratio: 1 / 2.4; /* width : height = 1 : 2.4 */
+            max-width: 450px;
+            aspect-ratio: 1 / 2.4; /* width:height = 1:2.4 */
             display: flex;
             flex-direction: column;
-            background: #f0f0f0;
-            border-radius: 10px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            background: #ffffff;
+            border-radius: 15px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
             overflow: hidden;
         }
 
         #chat-header {
-            background: #075e54;
-            color: white;
-            padding: 15px;
-            font-size: 18px;
+            background: #ffffff;
+            color: #2c3e50;
+            padding: 12px 15px;
+            font-size: 16px;
             font-weight: bold;
             text-align: center;
+            border-bottom: 1px solid #ccc;
         }
 
         #messages {
             flex: 1;
-            padding: 15px;
+            padding: 12px;
             overflow-y: auto;
             display: flex;
             flex-direction: column;
-            scroll-behavior:
+            scroll-behavior: smooth;
+            background: #f5f5f5;
+        }
+
+        .message {
+            max-width: 75%;
+            padding: 8px 12px;
+            margin: 4px 0;
+            border-radius: 18px;
+            position: relative;
+            word-wrap: break-word;
+            font-size: 14px;
+            line-height: 1.4;
+        }
+
+        .self {
+            background: #dcf8c6;
+            align-self: flex-end;
+            text-align: right;
+        }
+
+        .other {
+            background: #ffffff;
+            align-self: flex-start;
+            text-align: left;
+        }
+
+        .timestamp {
+            display: block;
+            font-size: 10px;
+            color: #999;
+            margin-top: 2px;
+        }
+
+        #input-area {
+            display: flex;
+            padding: 10px;
+            border-top: 1px solid #ccc;
+            background: #ffffff;
+            gap: 6px;
+            align-items: center;
+        }
+
+        #username {
+            display: none; /* hide username input to mimic Telegram simplicity */
+        }
+
+        #message {
+            flex: 1;
+            padding: 10px 15px;
+            border-radius: 20px;
+            border: 1px solid #ccc;
+            font-size: 14px;
+        }
+
+        #send-btn {
+            flex: 0 0 auto;
+            padding: 10px 14px;
+            border: none;
+            background: #1e90ff;
+            color: white;
+            font-weight: bold;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 16px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        #send-btn:hover {
+            background: #0f75d4;
+        }
+
+        /* Scrollbar styling */
+        #messages::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        #messages::-webkit-scrollbar-thumb {
+            background: rgba(0,0,0,0.2);
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body>
+    <div id="chat-container">
+        <div id="chat-header">Private Chat</div>
+        <div id="messages"></div>
+        <div id="input-area">
+            <input id="username" placeholder="Your name" />
+            <input id="message" placeholder="Type a message..." autocomplete="off"/>
+            <button id="send-btn">&#9658;</button>
+        </div>
+    </div>
+
+    <script>
+        var socket = io();
+        var selfName = "You";
+
+        function getTime() {
+            const now = new Date();
+            return now.getHours().toString().padStart(2, '0') + ':' +
+                   now.getMinutes().toString().padStart(2, '0');
+        }
+
+        document.getElementById('send-btn').onclick = function() {
+            var input = document.getElementById('message');
+            var msg = input.value.trim();
+            if(msg !== ""){
+                socket.send({user: selfName, text: msg, time: getTime()});
+                input.value = "";
+            }
+        };
+
+        document.getElementById('message').addEventListener('keypress', function(e){
+            if(e.key === 'Enter') document.getElementById('send-btn').click();
+        });
+
+        socket.on('message', function(msg){
+            var messages = document.getElementById('messages');
+            var div = document.createElement('div');
+            div.classList.add('message');
+
+            if(msg.user === selfName){
+                div.classList.add('self');
+            } else {
+                div.classList.add('other');
+            }
+
+            div.innerHTML = `<strong>${msg.user}</strong><br>${msg.text}<span class="timestamp">${msg.time}</span>`;
+            messages.appendChild(div);
+            messages.scrollTop = messages.scrollHeight;
+        });
+    </script>
+</body>
+</html>
