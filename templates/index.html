@@ -1,33 +1,114 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Private Chat</title>
-    <script src="https://cdn.socket.io/4.3.2/socket.io.min.js"></script>
+    <title>Private Chat Room</title>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #f5f5f5;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 0;
+            height: 100vh;
+        }
+
+        h2 {
+            margin-top: 20px;
+            color: #333;
+        }
+
+        #chat-container {
+            display: flex;
+            flex-direction: column;
+            width: 90%;
+            max-width: 600px;
+            height: 70%;
+            border: 1px solid #ccc;
+            border-radius: 10px;
+            background: #fff;
+            overflow: hidden;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        }
+
+        #messages {
+            flex: 1;
+            padding: 10px;
+            overflow-y: auto;
+        }
+
+        #messages div {
+            margin: 5px 0;
+            padding: 8px 12px;
+            background: #e0f7fa;
+            border-radius: 8px;
+            max-width: 80%;
+            word-wrap: break-word;
+        }
+
+        #input-area {
+            display: flex;
+            border-top: 1px solid #ccc;
+        }
+
+        #message {
+            flex: 1;
+            padding: 10px;
+            border: none;
+            border-radius: 0;
+            font-size: 16px;
+        }
+
+        #send-btn {
+            padding: 10px 20px;
+            border: none;
+            background: #00796b;
+            color: white;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        #send-btn:hover {
+            background: #004d40;
+        }
+    </style>
 </head>
 <body>
-    <h2>Welcome to the Private Chat Room</h2>
+    <h2>Private Chat Room</h2>
 
-    <div id="chatbox" style="border:1px solid #ccc; height:300px; overflow:auto; padding:10px;"></div>
-
-    <input id="message" placeholder="Type your message" style="width:70%;" />
-    <button onclick="sendMessage()">Send</button>
+    <div id="chat-container">
+        <div id="messages"></div>
+        <div id="input-area">
+            <input id="message" placeholder="Type your message..." autocomplete="off"/>
+            <button id="send-btn">Send</button>
+        </div>
+    </div>
 
     <script>
         var socket = io();
 
         socket.on('message', function(msg){
-            var chatbox = document.getElementById('chatbox');
-            chatbox.innerHTML += "<div>" + msg + "</div>";
-            chatbox.scrollTop = chatbox.scrollHeight;
+            var messages = document.getElementById('messages');
+            var div = document.createElement('div');
+            div.textContent = msg;
+            messages.appendChild(div);
+            messages.scrollTop = messages.scrollHeight;  // auto-scroll
         });
 
-        function sendMessage(){
-            var msg = document.getElementById('message').value;
-            if(msg.trim() !== ""){
+        document.getElementById('send-btn').onclick = function() {
+            var input = document.getElementById('message');
+            var msg = input.value.trim();
+            if(msg !== ""){
                 socket.send(msg);
-                document.getElementById('message').value = "";
+                input.value = "";
             }
-        }
+        };
+
+        // allow Enter key to send message
+        document.getElementById('message').addEventListener('keypress', function(e){
+            if(e.key === 'Enter') document.getElementById('send-btn').click();
+        });
     </script>
 </body>
 </html>
