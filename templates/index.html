@@ -1,225 +1,68 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
-  <title>Private Chat Room</title>
-  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
-  <style>
-    /* Instagram-like dark theme (keeps previous look you liked) */
-    :root{--bg:#121212;--panel:#1e1e1e;--bubble-other:#2a2a2a;--bubble-self-start:#bc2a8d;--bubble-self-end:#e95950;--accent:#4fc3f7}
-    html,body{height:100%;margin:0;font-family:Segoe UI,Roboto,Arial;background:var(--bg);color:#fff}
-    #chat-container{width:100%;max-width:500px;height:100vh;display:flex;flex-direction:column;background:var(--panel);margin:0 auto;overflow:hidden}
-    #chat-header{background:var(--panel);padding:14px;text-align:center;font-weight:600;border-bottom:1px solid #333}
-    #messages{flex:1;padding:14px;display:flex;flex-direction:column-reverse;overflow-y:auto;background:var(--bg);scroll-behavior:smooth}
-    .message{max-width:78%;margin:6px 0;border-radius:18px;padding:9px 12px;word-wrap:break-word;font-size:15px;transition:all .18s}
-    .self{align-self:flex-end;background:linear-gradient(120deg,var(--bubble-self-start),var(--bubble-self-end));text-align:right}
-    .other{align-self:flex-start;background:var(--bubble-other);text-align:left}
-    .emoji-only{font-size:34px;padding:10px}
-    .meta{display:inline-block;margin-left:8px;font-size:11px;color:#bdbdbd;vertical-align:middle}
-    .receipt{margin-left:6px;font-size:11px;vertical-align:middle;color:#bdbdbd}
-    .receipt.read{color:var(--accent)}
-    #input-area{display:flex;padding:10px;border-top:1px solid #333;background:var(--panel);gap:8px;align-items:center}
-    #message-input{flex:1;padding:10px;border-radius:20px;border:1px solid #3a3a3a;background:#2a2a2a;color:#fff;outline:none;font-size:15px}
-    #send-btn{background:#e95950;border:none;color:#fff;padding:10px 14px;border-radius:50%;cursor:pointer;font-size:16px}
-    /* scrollbar */
-    #messages::-webkit-scrollbar{width:6px}
-    #messages::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.08);border-radius:3px}
-  </style>
+  <meta charset="UTF-8">
+  <title>Chat</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.6.1/socket.io.min.js"></script>
 </head>
 <body>
-  <div id="chat-container">
-    <div id="chat-header">Private Chat Room</div>
-
-    <!-- messages list (newest at bottom logically, but column-reverse used) -->
-    <div id="messages"></div>
-
-    <div id="input-area">
-      <input id="message-input" placeholder="Message..." autocomplete="off" />
-      <button id="send-btn">&#9658;</button>
+  <div class="chat-container">
+    <div id="status-bar">Online</div>
+    <div id="chat-box"></div>
+    <div class="input-area">
+      <input type="text" id="message" placeholder="Type a message...">
+      <button id="sendBtn">Send</button>
     </div>
   </div>
 
-<script>
-  // Socket
-  const socket = io();
+  <script>
+    const socket = io();
+    const chatBox = document.getElementById('chat-box');
+    const msgInput = document.getElementById('message');
+    const sendBtn = document.getElementById('sendBtn');
 
-  // Helpers
-  function genClientId() {
-    // simple unique id
-    return 'c_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,8);
-  }
-  function getLocalTime() {
-    const now = new Date();
-    return now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0');
-  }
-  function isEmojiOnly(text) {
-    const trimmed = text.trim();
-    try {
-      const emojiRegex = /^[\p{Emoji}\u200d]+$/u;
-      return emojiRegex.test(trimmed);
-    } catch (e) {
-      // fallback: consider short single-character strings as emoji-only
-      return trimmed.length > 0 && trimmed.length <= 2;
+    function renderMessage(data, self=false) {
+      let isEmojiOnly = /^[\p{Emoji}\u200d]+$/u.test(data.msg);
+
+      const div = document.createElement('div');
+      div.classList.add('message', self ? 'sent' : 'received');
+
+      let bubble = `
+        <div class="bubble ${isEmojiOnly ? 'emoji-only' : ''}">
+          ${data.msg}
+          <span class="timestamp">${data.timestamp}
+            ${self ? '<span class="ticks">✓</span>' : ''}
+          </span>
+        </div>
+      `;
+      div.innerHTML = bubble;
+      chatBox.appendChild(div);
+      chatBox.scrollTop = chatBox.scrollHeight;
     }
-  }
 
-  // DOM refs
-  const messagesEl = document.getElementById('messages');
-  const inputEl = document.getElementById('message-input');
-  const sendBtn = document.getElementById('send-btn');
-
-  // Render helpers
-  function buildMessageElement(m, isSelf, status) {
-    // m: { id, client_id?, user, text, time }
-    const wrapper = document.createElement('div');
-    wrapper.className = 'message ' + (isSelf ? 'self' : 'other');
-    wrapper.id = 'msg-' + m.id;
-
-    // bigger font if emoji-only
-    const emojiClass = isEmojiOnly(m.text) ? ' emoji-only' : '';
-    wrapper.innerHTML = `
-      <div class="content${emojiClass}">${escapeHtml(m.text)}</div>
-      <div class="meta">
-        <span class="time">${escapeHtml(m.time)}</span>
-        ${isSelf ? `<span class="receipt ${status==='read' ? 'read':''}">${receiptText(status)}</span>` : ''}
-      </div>
-    `;
-    return wrapper;
-  }
-
-  function escapeHtml(s){
-    return s.replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;');
-  }
-
-  function receiptText(status){
-    if(status === 'sent') return '✓';
-    if(status === 'delivered') return '✓✓';
-    if(status === 'read') return '✓✓';
-    return '';
-  }
-
-  // State: track mapping from client_id -> element id
-  const tempMap = {}; // client_id -> temp element id (temp-...)
-
-  // Load persisted messages from server
-  fetch('/messages')
-    .then(r => r.json())
-    .then(arr => {
-      // arr is an array of message objects in insertion order
-      // we want newest at bottom in visual order but we use column-reverse,
-      // so we need to prepend in reverse order
-      arr.reverse().forEach(m => {
-        const isSelf = (m.user === 'You');
-        const el = buildMessageElement({
-          id: m.id,
-          text: m.text,
-          time: m.time
-        }, isSelf, m.status || 'sent');
-        // prepend (because column-reverse)
-        messagesEl.prepend(el);
+    socket.on('chat_history', (history) => {
+      chatBox.innerHTML = "";
+      history.forEach(msg => {
+        renderMessage(msg, msg.username === socket.id);
       });
-      // small scroll
-      messagesEl.scrollTop = 0;
-    })
-    .catch(()=>{ /* ignore */ });
-
-  // Send flow
-  sendBtn.onclick = sendMessage;
-  inputEl.addEventListener('keydown', (e) => {
-    if(e.key === 'Enter') sendMessage();
-  });
-
-  function sendMessage(){
-    const text = inputEl.value.trim();
-    if(!text) return;
-    const client_id = genClientId();
-    const localTime = getLocalTime();
-    const tempId = 'temp-' + client_id;
-
-    // Create temp message element immediately (optimistic UI)
-    const tempMsg = {
-      id: tempId,
-      text: text,
-      time: localTime
-    };
-    const tempEl = buildMessageElement(tempMsg, true, 'sent');
-    tempEl.id = tempId;
-    // add a receipt span for temp element (already added by buildMessageElement)
-    messagesEl.prepend(tempEl);
-    tempMap[client_id] = tempId;
-    messagesEl.scrollTop = 0;
-
-    // send to server with client_id and client time (so timestamp matches local)
-    socket.emit('send_message', {
-      client_id: client_id,
-      user: 'You',
-      text: text,
-      time: localTime
     });
 
-    inputEl.value = '';
-  }
+    socket.on('receive_message', (data) => {
+      renderMessage(data, data.username === socket.id);
+    });
 
-  // When server broadcasts message to other clients
-  socket.on('receive_message', function(msg){
-    // msg has server id, client_id (maybe), user, text, time, status
-    // Add message if it's not already present (avoid duplicates)
-    if(document.getElementById('msg-' + msg.id)) return; // already present
-
-    const el = buildMessageElement({id: msg.id, text: msg.text, time: msg.time}, msg.user === 'You', msg.status || 'sent');
-    messagesEl.prepend(el);
-    messagesEl.scrollTop = 0;
-
-    // Immediately notify server that this client has "read" the received message
-    // (this triggers read receipts) — you can add logic to wait until visible or user scrolls
-    socket.emit('message_read', { id: msg.id });
-  });
-
-  // Handle status updates (delivered / read)
-  // Two flavors:
-  // - initial delivered update includes client_id + server_id for sender mapping
-  // - later 'read' uses server_id
-  socket.on('status_update', function(update){
-    // delivered mapping from server after storing message
-    if(update.client_id && update.server_id && update.status === 'delivered'){
-      const tempId = tempMap[update.client_id];
-      if(tempId){
-        const tempEl = document.getElementById(tempId);
-        if(tempEl){
-          // replace tempId with real server id element (change id, and add receipt)
-          tempEl.id = 'msg-' + update.server_id;
-          // find receipt span and change content to delivered
-          const receiptSpan = tempEl.querySelector('.receipt');
-          if(receiptSpan) receiptSpan.textContent = '✓✓';
-          // remove mapping
-          delete tempMap[update.client_id];
-        }
+    sendBtn.onclick = () => {
+      let msg = msgInput.value.trim();
+      if (msg) {
+        socket.emit('send_message', { msg: msg, username: socket.id });
+        msgInput.value = "";
       }
-    }
+    };
 
-    // universal status update by server using server_id
-    if(update.server_id && update.status){
-      const el = document.getElementById('msg-' + update.server_id);
-      if(el){
-        const receiptSpan = el.querySelector('.receipt');
-        if(receiptSpan){
-          receiptSpan.textContent = (update.status === 'read') ? '✓✓' : (update.status === 'delivered' ? '✓✓' : '✓');
-          if(update.status === 'read') receiptSpan.classList.add('read');
-        } else {
-          // if no receipt exists (maybe for others' messages), we only add receipt for self messages
-          // do nothing
-        }
-      }
-    }
-  });
-
-  // small helper so messages near typing bar are visible on mobile keyboard open
-  window.addEventListener('resize', () => {
-    messagesEl.style.height = window.innerHeight + 'px';
-    messagesEl.scrollTop = 0;
-  });
-
-</script>
+    socket.on('status', (data) => {
+      document.getElementById('status-bar').innerText = data.msg;
+    });
+  </script>
 </body>
 </html>
