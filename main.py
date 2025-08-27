@@ -1,22 +1,26 @@
+import eventlet
+eventlet.monkey_patch()  # MUST be first
+
 from flask import Flask, render_template
 from flask_socketio import SocketIO, send
 
-# create flask app
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'secret!'
+
+# Initialize SocketIO with eventlet
 socketio = SocketIO(app)
 
-# home route
 @app.route('/')
 def index():
     return render_template('index.html')
 
-# handle chat messages
 @socketio.on('message')
 def handleMessage(msg):
-    print('Message: ' + msg)   # log message on server
-    send(msg, broadcast=True)  # send to all connected users
+    """
+    msg is expected as a dict: {user: username, text: message}
+    """
+    print(f"{msg['user']}: {msg['text']}")
+    send(msg, broadcast=True)
 
-# run app
 if __name__ == '__main__':
     socketio.run(app, host='0.0.0.0', port=5000)
