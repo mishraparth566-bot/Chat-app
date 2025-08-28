@@ -3,103 +3,80 @@
 <head>
     <title>Private Chat</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
 </head>
 <body>
     <div class="chat-container">
         <div id="chat-box"></div>
 
-        <!-- Instagram DM style typing bubble -->
+        <!-- Typing indicator -->
         <div id="typing-indicator" class="typing hidden">
             <span></span><span></span><span></span>
         </div>
 
         <form id="chatForm">
             <input type="text" id="user" placeholder="Your name" required>
-            <input type="text" id="message" placeholder="Message..." required>
-            <button type="submit">➤</button>
+            <div class="input-wrapper">
+                <input type="text" id="message" placeholder="Message..." required>
+                <button type="submit">➤</button>
+            </div>
         </form>
     </div>
 
     <script>
-        async function loadMessages() {
-            const res = await fetch("/messages");
-            const messages = await res.json();
-            const chatBox = document.getElementById("chat-box");
-            chatBox.innerHTML = "";
+        const socket = io();
 
-            const currentUser = document.getElementById("user").value;
+        const chatBox = document.getElementById("chat-box");
+        const typingIndicator = document.getElementById("typing-indicator");
+        const userField = document.getElementById("user");
+        const messageField = document.getElementById("message");
 
-            messages.forEach(m => {
-                const div = document.createElement("div");
-                div.classList.add("bubble");
-                if (m.user === currentUser) {
-                    div.classList.add("mine");
-                } else {
-                    div.classList.add("theirs");
-                }
-                div.textContent = m.text;
-                chatBox.appendChild(div);
-            });
-            chatBox.scrollTop = chatBox.scrollHeight;
-        }
-
-        async function checkTyping() {
-            const res = await fetch("/typing");
-            const data = await res.json();
-            const indicator = document.getElementById("typing-indicator");
-            if (data.typing) {
-                indicator.classList.remove("hidden");
-            } else {
-                indicator.classList.add("hidden");
-            }
-        }
-
-        document.getElementById("chatForm").addEventListener("submit", async (e) => {
+        document.getElementById("chatForm").addEventListener("submit", (e) => {
             e.preventDefault();
-            const user = document.getElementById("user").value;
-            const text = document.getElementById("message").value;
+            const user = userField.value.trim();
+            const text = messageField.value.trim();
+            if (!user || !text) return;
 
-            await fetch("/messages", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ user, text })
-            });
-
-            document.getElementById("message").value = "";
-            await fetch("/typing", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ typing: false })
-            });
-            loadMessages();
+            socket.emit("send_message", { user, text });
+            messageField.value = "";
         });
 
+        socket.on("receive_message", (data) => {
+            const div = document.createElement("div");
+            div.classList.add("bubble");
+            if (data.user === userField.value) {
+                div.classList.add("mine");
+            } else {
+                div.classList.add("theirs");
+            }
+            div.textContent = `${data.text}`;
+            chatBox.appendChild(div);
+            chatBox.scrollTop = chatBox.scrollHeight;
+        });
+
+        // typing events
         let typingTimeout;
-        document.getElementById("message").addEventListener("input", async () => {
-            await fetch("/typing", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ typing: true })
-            });
-
+        messageField.addEventListener("input", () => {
+            socket.emit("typing", { typing: true });
             clearTimeout(typingTimeout);
-            typingTimeout = setTimeout(async () => {
-                await fetch("/typing", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ typing: false })
-                });
-            }, 2000);
+            typingTimeout = setTimeout(() => {
+                socket.emit("typing", { typing: false });
+            }, 1500);
         });
 
-        // mobile keyboard fix
+        socket.on("typing", (data) => {
+            if (data.typing) {
+                typingIndicator.classList.remove("hidden");
+                chatBox.scrollTop = chatBox.scrollHeight;
+            } else {
+                typingIndicator.classList.add("hidden");
+            }
+        });
+
+        // Mobile keyboard fix
         window.addEventListener("resize", () => {
             document.body.style.height = window.innerHeight + "px";
         });
-
-        setInterval(loadMessages, 2000);
-        setInterval(checkTyping, 1000);
-        loadMessages();
     </script>
 </body>
 </html>
