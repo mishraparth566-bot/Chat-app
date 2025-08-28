@@ -1,155 +1,123 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta charset="UTF-8">
   <title>Chat</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 </head>
 <body>
   <div class="chat-shell">
-    <header class="chat-header">
+    <div class="chat-header">
       <div class="header-left">
-        <button id="backBtn" class="icon back">◀</button>
-        <div class="chat-title">Chat</div>
+        <button class="icon back">←</button>
+        <span class="chat-title">Chat</span>
       </div>
-      <div class="header-right">
-        <div id="onlineLabel" class="online hidden">Online</div>
-      </div>
-    </header>
-
-    <main id="chatArea" class="chat-area">
-      <div id="messages" class="messages"></div>
-    </main>
-
-    <!-- typing indicator (appears above input) -->
-    <div id="typingIndicator" class="typing hidden">
-      <span></span><span></span><span></span>
+      <span class="online">● Online</span>
     </div>
 
-    <!-- input -->
-    <form id="inputForm" class="input-form" action="javascript:void(0);">
-      <div class="input-wrapper">
-        <input id="messageInput" type="text" autocomplete="off" placeholder="iMessage..." />
+    <div class="chat-area">
+      <div id="messages" class="messages"></div>
+
+      <!-- typing indicator -->
+      <div id="typingIndicator" class="typing hidden">
+        <span></span><span></span><span></span>
       </div>
-      <button id="sendBtn" type="submit" class="send-btn">➤</button>
-    </form>
+
+      <form id="form" class="input-form">
+        <div class="input-wrapper">
+          <input id="input" autocomplete="off" placeholder="Type a message...">
+        </div>
+        <button class="send-btn">➤</button>
+      </form>
+    </div>
   </div>
 
-  <!-- socket.io client -->
-  <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
+<script>
+const socket = io();
+const form = document.getElementById('form');
+const input = document.getElementById('input');
+const messages = document.getElementById('messages');
+const typingIndicator = document.getElementById('typingIndicator');
 
-  <script>
-    const socket = io();
-    const messagesEl = document.getElementById('messages');
-    const messageInput = document.getElementById('messageInput');
-    const inputForm = document.getElementById('inputForm');
-    const typingIndicator = document.getElementById('typingIndicator');
-    const onlineLabel = document.getElementById('onlineLabel');
+const client_id = Math.random().toString(36).substring(2, 9);
 
-    let clientId = localStorage.getItem('client_id');
-    if (!clientId) {
-      clientId = 'c_' + Date.now() + '_' + Math.random().toString(36).slice(2,9);
-      localStorage.setItem('client_id', clientId);
-    }
+// ----------------- Typing -----------------
+let typing = false;
+let typingTimeout;
 
-    socket.on('connect', () => {
-      socket.emit('join', { client_id: clientId });
-    });
+input.addEventListener('input', () => {
+  if (!typing) {
+    typing = true;
+    socket.emit('typing', { client_id, typing: true });
+  }
+  clearTimeout(typingTimeout);
+  typingTimeout = setTimeout(() => {
+    typing = false;
+    socket.emit('typing', { client_id, typing: false });
+  }, 1200);
+});
 
-    function isOnlyEmoji(str) {
-      const emojiRegex = /^(?:\p{Emoji_Presentation}|\p{Emoji}\uFE0F|\p{Emoji_Modifier_Base})+$/u;
-      try { return emojiRegex.test(str.trim()); } catch(e) { return false; }
-    }
+socket.on('typing_update', (data) => {
+  const typingClients = data.typing_clients || [];
+  const othersTyping = typingClients.length > 0;
 
-    function renderMessage(msg) {
-      const div = document.createElement('div');
-      div.classList.add('msg-bubble');
-      const mine = msg.client_id === clientId;
-      div.classList.add(mine ? 'mine' : 'theirs');
+  if (othersTyping) {
+    typingIndicator.classList.remove('hidden');
+  } else {
+    typingIndicator.classList.add('hidden');
+  }
+});
 
-      if (isOnlyEmoji(msg.text)) {
-        const span = document.createElement('div');
-        span.className = 'emoji-standalone';
-        span.textContent = msg.text;
-        div.appendChild(span);
-      } else {
-        const span = document.createElement('div');
-        span.className = 'msg-text';
-        span.textContent = msg.text;
-        div.appendChild(span);
-      }
+// ----------------- Messages -----------------
+form.addEventListener('submit', (e) => {
+  e.preventDefault();
+  const text = input.value.trim();
+  if (!text) return;
 
-      messagesEl.appendChild(div);
-      scrollToBottom();
-    }
+  socket.emit('send_message', { client_id, text });
+  input.value = '';
+});
 
-    function scrollToBottom() {
-      requestAnimationFrame(() => {
-        messagesEl.scrollTop = messagesEl.scrollHeight;
-      });
-    }
+socket.on('new_message', (msg) => {
+  addMessage(msg);
 
-    socket.on('load_messages', (allMessages) => {
-      messagesEl.innerHTML = '';
-      allMessages.forEach(m => renderMessage(m));
-      scrollToBottom();
-    });
+  if (msg.client_id !== client_id) {
+    // mark read after short delay
+    setTimeout(() => {
+      socket.emit("message_read", { message_id: msg.id });
+    }, 500);
+  }
+});
 
-    socket.on('new_message', (msg) => {
-      renderMessage(msg);
-    });
+socket.on('message_read_update', (data) => {
+  const el = document.querySelector(`[data-id="${data.message_id}"] .status`);
+  if (el) {
+    el.innerHTML = '✓✓';
+    el.style.color = '#007aff'; // luminous blue
+  }
+});
 
-    // typing indicator
-    let typingVisible = false;
-    socket.on('typing_update', (data) => {
-      const typingClients = data.typing_clients || [];
-      const othersTyping = typingClients.length > 0;
+function addMessage(msg) {
+  const isMine = msg.client_id === client_id;
+  const bubble = document.createElement('div');
+  bubble.className = `msg-bubble ${isMine ? 'mine' : 'theirs'}`;
+  bubble.dataset.id = msg.id;
 
-      if (othersTyping && !typingVisible) {
-        typingIndicator.classList.remove('hidden');
-        scrollToBottom();
-        typingVisible = true;
-      } else if (!othersTyping && typingVisible) {
-        typingIndicator.classList.add('hidden');
-        typingVisible = false;
-      }
-    });
+  const time = new Date(msg.timestamp * 1000)
+                  .toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
 
-    socket.on('online_count', (data) => {
-      const count = data.online || 0;
-      if (count > 1) {
-        onlineLabel.classList.remove('hidden');
-      } else {
-        onlineLabel.classList.add('hidden');
-      }
-    });
+  bubble.innerHTML = `
+    <div class="text">${msg.text}</div>
+    <div class="meta">
+      <span class="time">${time}</span>
+      ${isMine ? '<span class="status">✓</span>' : ''}
+    </div>
+  `;
 
-    inputForm.addEventListener('submit', (e) => {
-      e.preventDefault();
-      const txt = messageInput.value.trim();
-      if (!txt) return;
-      socket.emit('send_message', { client_id: clientId, text: txt });
-      messageInput.value = '';
-      socket.emit('typing', { client_id: clientId, typing: false });
-    });
-
-    // typing detection
-    let typingTimer = null;
-    messageInput.addEventListener('input', () => {
-      socket.emit('typing', { client_id: clientId, typing: true });
-      if (typingTimer) clearTimeout(typingTimer);
-      typingTimer = setTimeout(() => {
-        socket.emit('typing', { client_id: clientId, typing: false });
-      }, 1200);
-    });
-
-    window.addEventListener('resize', () => {
-      document.body.style.height = window.innerHeight + 'px';
-      scrollToBottom();
-    });
-
-    window.addEventListener('load', () => setTimeout(scrollToBottom, 50));
-  </script>
+  messages.appendChild(bubble);
+  messages.scrollTop = messages.scrollHeight;
+}
+</script>
 </body>
 </html>
