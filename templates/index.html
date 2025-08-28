@@ -10,7 +10,6 @@
   <div class="chat-shell">
     <header class="chat-header">
       <div class="header-left">
-        <button id="backBtn" class="icon back">◀</button>
         <div class="chat-title">Chat</div>
       </div>
       <div class="header-right">
@@ -22,7 +21,7 @@
       <div id="messages" class="messages"></div>
     </main>
 
-    <!-- typing indicator (appears above input) -->
+    <!-- typing indicator -->
     <div id="typingIndicator" class="typing hidden">
       <span></span><span></span><span></span>
     </div>
@@ -36,9 +35,7 @@
     </form>
   </div>
 
-  <!-- socket.io client -->
   <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
-
   <script>
     const socket = io();
     const messagesEl = document.getElementById('messages');
@@ -80,6 +77,19 @@
         div.appendChild(span);
       }
 
+      // timestamp + receipts
+      const meta = document.createElement('div');
+      meta.className = 'msg-meta';
+      const time = new Date(msg.time).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+      let status = '';
+      if (mine) {
+        if (msg.status === 'sent') status = '✓';
+        else if (msg.status === 'delivered') status = '✓✓';
+        else if (msg.status === 'read') status = '✓✓';
+      }
+      meta.innerHTML = `<span>${time}</span> <span class="status ${msg.status||''}">${status}</span>`;
+      div.appendChild(meta);
+
       messagesEl.appendChild(div);
       scrollToBottom();
     }
@@ -90,39 +100,35 @@
       });
     }
 
-    socket.on('load_messages', (allMessages) => {
+    socket.on('load_messages', (all) => {
       messagesEl.innerHTML = '';
-      allMessages.forEach(m => renderMessage(m));
+      all.forEach(m => renderMessage(m));
       scrollToBottom();
+      socket.emit('mark_read', { client_id: clientId });
     });
 
     socket.on('new_message', (msg) => {
       renderMessage(msg);
+      socket.emit('mark_read', { client_id: clientId });
     });
 
-    // typing indicator
-    let typingVisible = false;
+    socket.on('update_messages', (msgs) => {
+      messagesEl.innerHTML = '';
+      msgs = Array.isArray(msgs) ? msgs : [msgs];
+      // reload all from server again to avoid duplication
+      socket.emit('join', { client_id: clientId });
+    });
+
     socket.on('typing_update', (data) => {
       const typingClients = data.typing_clients || [];
       const othersTyping = typingClients.length > 0;
-
-      if (othersTyping && !typingVisible) {
-        typingIndicator.classList.remove('hidden');
-        scrollToBottom();
-        typingVisible = true;
-      } else if (!othersTyping && typingVisible) {
-        typingIndicator.classList.add('hidden');
-        typingVisible = false;
-      }
+      typingIndicator.classList.toggle('hidden', !othersTyping);
+      if (othersTyping) scrollToBottom();
     });
 
     socket.on('online_count', (data) => {
       const count = data.online || 0;
-      if (count > 1) {
-        onlineLabel.classList.remove('hidden');
-      } else {
-        onlineLabel.classList.add('hidden');
-      }
+      onlineLabel.classList.toggle('hidden', count <= 1);
     });
 
     inputForm.addEventListener('submit', (e) => {
@@ -134,7 +140,6 @@
       socket.emit('typing', { client_id: clientId, typing: false });
     });
 
-    // typing detection
     let typingTimer = null;
     messageInput.addEventListener('input', () => {
       socket.emit('typing', { client_id: clientId, typing: true });
