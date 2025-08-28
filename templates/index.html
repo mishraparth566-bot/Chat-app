@@ -2,14 +2,13 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>DM Chat</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+  <title>Private Chat</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 </head>
 <body>
   <div class="app">
-    <!-- header -->
     <div class="header">
       <div class="avatar"></div>
       <div class="who">
@@ -18,10 +17,8 @@
       </div>
     </div>
 
-    <!-- messages -->
-    <div id="messages" class="messages"></div>
+    <div id="messages" class="messages" aria-live="polite"></div>
 
-    <!-- input bar -->
     <div class="inputbar">
       <input id="input" placeholder="Message..." autocomplete="off" />
       <button id="sendBtn">Send</button>
@@ -29,131 +26,164 @@
   </div>
 
 <script>
-  // --- socket setup
+(function(){
   const socket = io();
-
-  // --- DOM
-  const listEl = document.getElementById('messages');
+  const messagesEl = document.getElementById('messages');
   const inputEl = document.getElementById('input');
   const sendBtn = document.getElementById('sendBtn');
   const onlineText = document.getElementById('onlineText');
 
-  // helpers
-  const clientId = () => 'c_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,8);
+  // helper small utilities
+  const genClientId = () => 'c_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,8);
   const localTime = () => {
     const d = new Date();
     return d.getHours().toString().padStart(2,'0') + ':' + d.getMinutes().toString().padStart(2,'0');
   };
   const isEmojiOnly = (t) => {
     const s = (t||'').trim();
-    try { return /^[\p{Emoji}\u200d]+$/u.test(s); } catch { return s.length<=2; }
+    try { return /^[\p{Emoji}\u200d\s]+$/u.test(s) && s.length <= 6; } catch(e) { return s.length <= 2; }
   };
+  const escapeHtml = (s) => (s||'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;');
 
-  // keep map to replace temp -> server id
+  // mapping client temp -> element id
   const tempMap = {}; // client_id -> tempElementId
 
-  // render one bubble
-  function renderBubble({id, text, time, status}, side){
-    // side: 'self' or 'other'
-    const div = document.createElement('div');
-    div.className = `row ${side}`;
-    div.id = id ? ('msg-'+id) : '';
-    const emojiClass = isEmojiOnly(text) ? 'emoji' : '';
-    div.innerHTML = `
-      <div class="bubble ${side==='self'?'self':'other'} ${emojiClass}">
-        <span class="content">${escapeHtml(text)}</span>
-        <span class="meta">
-          <span class="t">${time||''}</span>
-          ${side==='self' ? `<span class="ticks">${statusToTicks(status)}</span>` : ''}
-        </span>
-      </div>
-    `;
-    listEl.appendChild(div);
-    listEl.scrollTop = listEl.scrollHeight;
-    return div;
-  }
-
-  function escapeHtml(s){ return (s||'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;'); }
-  function statusToTicks(s){
-    if(s==='read') return '<span class="tick read">✓✓</span>';
-    if(s==='delivered') return '✓✓';
+  // render helpers
+  function statusToTicks(status) {
+    if(status === 'read') return '<span class="tick read">✓✓</span>';
+    if(status === 'delivered') return '✓✓';
     return '✓';
   }
 
-  // presence
-  socket.on('presence', ({online})=>{
-    onlineText.textContent = online>1 ? 'Online • ' + online : 'Online';
+  function makeBubbleElement({ id, text, time, status }, side) {
+    const row = document.createElement('div');
+    row.className = side === 'self' ? 'row self' : 'row other';
+    if (id) row.id = 'msg-' + id;
+    const emojiClass = isEmojiOnly(text) ? ' emoji' : '';
+    row.innerHTML = `
+      <div class="bubble ${side === 'self' ? 'self' : 'other'} ${emojiClass}">
+        <div class="content">${escapeHtml(text)}</div>
+        <div class="meta">
+          <span class="t">${escapeHtml(time || '')}</span>
+          ${ side === 'self' ? `<span class="ticks">${statusToTicks(status)}</span>` : '' }
+        </div>
+      </div>
+    `;
+    return row;
+  }
+
+  function scrollToBottom() {
+    // newest at bottom (we append)
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  }
+
+  // load history: server emits 'chat_history' on connect
+  socket.on('chat_history', (arr) => {
+    messagesEl.innerHTML = '';
+    // arr is oldest->newest; append in same order
+    (arr || []).forEach(m => {
+      const side = 'other'; // history messages are treated as other (visual)
+      const el = makeBubbleElement({ id: m.id, text: m.text, time: m.time, status: m.status }, side);
+      messagesEl.appendChild(el);
+    });
+    scrollToBottom();
   });
 
-  // history on join
-  socket.on('chat_history', (arr)=>{
-    listEl.innerHTML = '';
-    // show oldest first
-    arr.forEach(m => renderBubble(m, 'other')); // history has no "me" concept; all as "other"
-    listEl.scrollTop = listEl.scrollHeight;
+  // presence updates
+  socket.on('presence', (p) => {
+    if(p && p.online){
+      onlineText.textContent = p.online > 1 ? 'Online • ' + p.online : 'Online';
+    } else {
+      onlineText.textContent = 'Online';
+    }
   });
 
-  // new message from others
-  socket.on('receive_message', (m)=>{
-    // avoid duplicate
-    if(document.getElementById('msg-'+m.id)) return;
-    renderBubble(m, 'other');
-    // mark as read quickly (simulate viewing)
-    setTimeout(()=> socket.emit('message_read', {id: m.id}), 500);
+  // someone else sent message (broadcast)
+  socket.on('receive_message', (msg) => {
+    // avoid duplicate if already present
+    if(document.getElementById('msg-' + msg.id)) return;
+    const el = makeBubbleElement({ id: msg.id, text: msg.text, time: msg.time, status: msg.status }, 'other');
+    messagesEl.appendChild(el);
+    scrollToBottom();
+    // notify server that we read (displayed) this message
+    setTimeout(()=> socket.emit('message_read', { id: msg.id }), 500);
   });
 
-  // status updates (delivered mapping + read)
-  socket.on('status_update', (u)=>{
-    // mapping for sender
-    if(u.client_id && u.server_id && u.status==='delivered'){
-      const tempId = tempMap[u.client_id];
-      if(tempId){
-        const el = document.getElementById(tempId);
-        if(el){
-          el.id = 'msg-'+u.server_id;               // swap to real id
-          const ticks = el.querySelector('.ticks');
+  // status updates: either mapping client->server (delivered) or server_id->status (read)
+  socket.on('status_update', (u) => {
+    // mapping delivered (contains client_id + server_id)
+    if(u.client_id && u.server_id && u.status === 'delivered'){
+      const tempElId = tempMap[u.client_id];
+      if(tempElId){
+        const tempEl = document.getElementById(tempElId);
+        if(tempEl){
+          // set the new id
+          tempEl.id = 'msg-' + u.server_id;
+          const ticks = tempEl.querySelector('.ticks');
           if(ticks) ticks.innerHTML = statusToTicks('delivered');
         }
         delete tempMap[u.client_id];
       }
       return;
     }
-    // later read updates
+    // generic update by server_id
     if(u.server_id && u.status){
-      const el = document.getElementById('msg-'+u.server_id);
+      const el = document.getElementById('msg-' + u.server_id);
       if(el){
         const ticks = el.querySelector('.ticks');
-        if(ticks) ticks.innerHTML = statusToTicks(u.status);
+        if(ticks){
+          ticks.innerHTML = statusToTicks(u.status);
+          if(u.status === 'read') ticks.classList.add('read');
+        }
       }
     }
   });
 
-  // send flow
-  function doSend(){
+  // send flow (optimistic UI)
+  function sendMessage(){
     const text = inputEl.value.trim();
     if(!text) return;
-
-    const cid = clientId();
+    const client_id = genClientId();
     const time = localTime();
-    const tempElId = 'temp-'+cid;
+    const tempId = 'temp-' + client_id;
+    const tempMsg = { id: null, text, time, status: 'sent' };
+    const tempEl = makeBubbleElement(tempMsg, 'self');
+    tempEl.id = tempId;
+    messagesEl.appendChild(tempEl);
+    scrollToBottom();
+    tempMap[client_id] = tempId;
 
-    // optimistic bubble (right side)
-    const tempDiv = renderBubble({id:null, text, time, status:'sent'}, 'self');
-    tempDiv.id = tempElId;
-    tempMap[cid] = tempElId;
+    // emit to server with client id and client time
+    socket.emit('send_message', { client_id, text, time });
 
-    // send to server
-    socket.emit('send_message', { client_id: cid, text, time });
     inputEl.value = '';
+    inputEl.focus();
   }
 
-  sendBtn.onclick = doSend;
-  inputEl.addEventListener('keydown', e=>{ if(e.key==='Enter') doSend(); });
+  sendBtn.addEventListener('click', sendMessage);
+  inputEl.addEventListener('keydown', (e) => { if(e.key === 'Enter') sendMessage(); });
 
-  // mobile keyboard adjustments
-  window.addEventListener('resize', ()=>{
-    listEl.scrollTop = listEl.scrollHeight;
-  });
+  // mobile keyboard awareness (visualViewport)
+  if (window.visualViewport) {
+    const appEl = document.querySelector('.app');
+    window.visualViewport.addEventListener('resize', () => {
+      const offset = window.innerHeight - window.visualViewport.height;
+      if(offset > 150){
+        appEl.style.height = window.visualViewport.height + 'px';
+        scrollToBottom();
+      } else {
+        appEl.style.height = '100vh';
+      }
+    });
+  }
+
+  // helper genClientId/localTime reused locally
+  function genClientId(){ return 'c_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,8); }
+  function localTime(){ const d=new Date(); return d.getHours().toString().padStart(2,'0') + ':' + d.getMinutes().toString().padStart(2,'0'); }
+
+  // initial focus
+  inputEl.focus();
+})();
 </script>
 </body>
 </html>
