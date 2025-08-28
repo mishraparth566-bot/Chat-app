@@ -2,15 +2,16 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Chat</title>
+  <title>Chat Room</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 </head>
 <body>
   <div class="chat-container">
+    <div id="header">Chat Room <span id="online"></span></div>
+
     <div id="messages" class="messages"></div>
 
-    <!-- typing indicator -->
     <div id="typingIndicator" class="typing hidden">
       <span></span><span></span><span></span>
     </div>
@@ -23,83 +24,70 @@
 
 <script>
 const socket = io();
-const form = document.getElementById('form');
-const input = document.getElementById('input');
-const messages = document.getElementById('messages');
-const typingIndicator = document.getElementById('typingIndicator');
+const messages = document.getElementById("messages");
+const form = document.getElementById("form");
+const input = document.getElementById("input");
+const typingIndicator = document.getElementById("typingIndicator");
+const onlineLabel = document.getElementById("online");
 
 const client_id = Math.random().toString(36).substring(2, 9);
 
-// ----------------- Typing -----------------
-let typing = false;
-let typingTimeout;
-
-input.addEventListener('input', () => {
-  if (!typing) {
-    typing = true;
-    socket.emit('typing', { client_id, typing: true });
-  }
-  clearTimeout(typingTimeout);
-  typingTimeout = setTimeout(() => {
-    typing = false;
-    socket.emit('typing', { client_id, typing: false });
-  }, 1200);
+// ----------------- Online -----------------
+socket.on("online_status", data => {
+  onlineLabel.textContent = data.status || "";
 });
 
-socket.on('typing_update', (data) => {
-  const typingClients = data.typing_clients || [];
-  const othersTyping = typingClients.some(c => c !== client_id);
-
-  if (othersTyping) {
-    typingIndicator.classList.remove('hidden');
-  } else {
-    typingIndicator.classList.add('hidden');
-  }
+// ----------------- History -----------------
+socket.on("chat_history", (msgs) => {
+  messages.innerHTML = "";
+  msgs.forEach(addMessage);
 });
 
-// ----------------- Messages -----------------
-form.addEventListener('submit', (e) => {
+// ----------------- Send -----------------
+form.addEventListener("submit", (e) => {
   e.preventDefault();
   const text = input.value.trim();
   if (!text) return;
-
-  socket.emit('send_message', { client_id, text });
-  input.value = '';
+  socket.emit("send_message", { client_id, text });
+  input.value = "";
 });
 
-socket.on('new_message', (msg) => {
+// ----------------- New messages -----------------
+socket.on("new_message", (msg) => {
   addMessage(msg);
 
   if (msg.client_id !== client_id) {
-    // mark as read after short delay
-    setTimeout(() => {
-      socket.emit("message_read", { message_id: msg.id });
-    }, 500);
+    socket.emit("message_received", { message_id: msg.id });
+    setTimeout(() => socket.emit("message_read", { message_id: msg.id }), 1000);
   }
 });
 
-socket.on('message_read_update', (data) => {
+socket.on("message_status", (data) => {
   const el = document.querySelector(`[data-id="${data.message_id}"] .status`);
   if (el) {
-    el.innerHTML = '✓✓';
-    el.style.color = '#007aff'; // luminous blue
+    if (data.status === "sent") el.textContent = "✓";
+    if (data.status === "received") { el.textContent = "✓✓"; el.style.color = "gray"; }
+    if (data.status === "read") { el.textContent = "✓✓"; el.style.color = "#007aff"; }
   }
 });
 
+// ----------------- Render -----------------
 function addMessage(msg) {
   const isMine = msg.client_id === client_id;
-  const bubble = document.createElement('div');
-  bubble.className = `message ${isMine ? 'mine' : 'theirs'}`;
+  const bubble = document.createElement("div");
+  bubble.className = `message ${isMine ? "mine" : "theirs"}`;
   bubble.dataset.id = msg.id;
 
   const time = new Date(msg.timestamp * 1000)
-                  .toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                .toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+  const isEmojiOnly = /^(\p{Emoji}|\s)+$/u.test(msg.text);
 
   bubble.innerHTML = `
-    <div class="text">${msg.text}</div>
+    <div class="text ${isEmojiOnly ? "emoji-big" : ""}">${msg.text}</div>
     <div class="meta">
       <span class="time">${time}</span>
-      ${isMine ? '<span class="status">✓</span>' : ''}
+      ${isMine ? `<span class="status">${msg.status === "sent" ? "✓" : ""}</span>` : ""}
     </div>
   `;
 
