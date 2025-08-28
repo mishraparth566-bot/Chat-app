@@ -1,189 +1,96 @@
-<!doctype html>
-<html lang="en">
+<!DOCTYPE html>
+<html>
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
-  <title>Private Chat</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <title>Private Chat</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-  <div class="app">
-    <div class="header">
-      <div class="avatar"></div>
-      <div class="who">
-        <div class="name">Private Chat</div>
-        <div class="online" id="onlineText">Online</div>
-      </div>
+    <div id="chat-box"></div>
+
+    <!-- Instagram-style typing bubble -->
+    <div id="typing-indicator" class="typing hidden">
+      <span></span><span></span><span></span>
     </div>
 
-    <div id="messages" class="messages" aria-live="polite"></div>
+    <form id="chatForm">
+        <input type="text" id="user" placeholder="Your name" required>
+        <input type="text" id="message" placeholder="Type a message..." required>
+        <button type="submit">Send</button>
+    </form>
 
-    <div class="inputbar">
-      <input id="input" placeholder="Message..." autocomplete="off" />
-      <button id="sendBtn">Send</button>
-    </div>
-  </div>
-
-<script>
-(function(){
-  const socket = io();
-  const messagesEl = document.getElementById('messages');
-  const inputEl = document.getElementById('input');
-  const sendBtn = document.getElementById('sendBtn');
-  const onlineText = document.getElementById('onlineText');
-
-  // helper small utilities
-  const genClientId = () => 'c_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,8);
-  const localTime = () => {
-    const d = new Date();
-    return d.getHours().toString().padStart(2,'0') + ':' + d.getMinutes().toString().padStart(2,'0');
-  };
-  const isEmojiOnly = (t) => {
-    const s = (t||'').trim();
-    try { return /^[\p{Emoji}\u200d\s]+$/u.test(s) && s.length <= 6; } catch(e) { return s.length <= 2; }
-  };
-  const escapeHtml = (s) => (s||'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;');
-
-  // mapping client temp -> element id
-  const tempMap = {}; // client_id -> tempElementId
-
-  // render helpers
-  function statusToTicks(status) {
-    if(status === 'read') return '<span class="tick read">✓✓</span>';
-    if(status === 'delivered') return '✓✓';
-    return '✓';
-  }
-
-  function makeBubbleElement({ id, text, time, status }, side) {
-    const row = document.createElement('div');
-    row.className = side === 'self' ? 'row self' : 'row other';
-    if (id) row.id = 'msg-' + id;
-    const emojiClass = isEmojiOnly(text) ? ' emoji' : '';
-    row.innerHTML = `
-      <div class="bubble ${side === 'self' ? 'self' : 'other'} ${emojiClass}">
-        <div class="content">${escapeHtml(text)}</div>
-        <div class="meta">
-          <span class="t">${escapeHtml(time || '')}</span>
-          ${ side === 'self' ? `<span class="ticks">${statusToTicks(status)}</span>` : '' }
-        </div>
-      </div>
-    `;
-    return row;
-  }
-
-  function scrollToBottom() {
-    // newest at bottom (we append)
-    messagesEl.scrollTop = messagesEl.scrollHeight;
-  }
-
-  // load history: server emits 'chat_history' on connect
-  socket.on('chat_history', (arr) => {
-    messagesEl.innerHTML = '';
-    // arr is oldest->newest; append in same order
-    (arr || []).forEach(m => {
-      const side = 'other'; // history messages are treated as other (visual)
-      const el = makeBubbleElement({ id: m.id, text: m.text, time: m.time, status: m.status }, side);
-      messagesEl.appendChild(el);
-    });
-    scrollToBottom();
-  });
-
-  // presence updates
-  socket.on('presence', (p) => {
-    if(p && p.online){
-      onlineText.textContent = p.online > 1 ? 'Online • ' + p.online : 'Online';
-    } else {
-      onlineText.textContent = 'Online';
-    }
-  });
-
-  // someone else sent message (broadcast)
-  socket.on('receive_message', (msg) => {
-    // avoid duplicate if already present
-    if(document.getElementById('msg-' + msg.id)) return;
-    const el = makeBubbleElement({ id: msg.id, text: msg.text, time: msg.time, status: msg.status }, 'other');
-    messagesEl.appendChild(el);
-    scrollToBottom();
-    // notify server that we read (displayed) this message
-    setTimeout(()=> socket.emit('message_read', { id: msg.id }), 500);
-  });
-
-  // status updates: either mapping client->server (delivered) or server_id->status (read)
-  socket.on('status_update', (u) => {
-    // mapping delivered (contains client_id + server_id)
-    if(u.client_id && u.server_id && u.status === 'delivered'){
-      const tempElId = tempMap[u.client_id];
-      if(tempElId){
-        const tempEl = document.getElementById(tempElId);
-        if(tempEl){
-          // set the new id
-          tempEl.id = 'msg-' + u.server_id;
-          const ticks = tempEl.querySelector('.ticks');
-          if(ticks) ticks.innerHTML = statusToTicks('delivered');
+    <script>
+        async function loadMessages() {
+            const res = await fetch("/messages");
+            const messages = await res.json();
+            const chatBox = document.getElementById("chat-box");
+            chatBox.innerHTML = "";
+            messages.forEach(m => {
+                const div = document.createElement("div");
+                div.textContent = `${m.user}: ${m.text}`;
+                chatBox.appendChild(div);
+            });
+            chatBox.scrollTop = chatBox.scrollHeight; // auto-scroll to bottom
         }
-        delete tempMap[u.client_id];
-      }
-      return;
-    }
-    // generic update by server_id
-    if(u.server_id && u.status){
-      const el = document.getElementById('msg-' + u.server_id);
-      if(el){
-        const ticks = el.querySelector('.ticks');
-        if(ticks){
-          ticks.innerHTML = statusToTicks(u.status);
-          if(u.status === 'read') ticks.classList.add('read');
+
+        async function checkTyping() {
+            const res = await fetch("/typing");
+            const data = await res.json();
+            const indicator = document.getElementById("typing-indicator");
+
+            if (data.typing) {
+                indicator.classList.remove("hidden");
+            } else {
+                indicator.classList.add("hidden");
+            }
         }
-      }
-    }
-  });
 
-  // send flow (optimistic UI)
-  function sendMessage(){
-    const text = inputEl.value.trim();
-    if(!text) return;
-    const client_id = genClientId();
-    const time = localTime();
-    const tempId = 'temp-' + client_id;
-    const tempMsg = { id: null, text, time, status: 'sent' };
-    const tempEl = makeBubbleElement(tempMsg, 'self');
-    tempEl.id = tempId;
-    messagesEl.appendChild(tempEl);
-    scrollToBottom();
-    tempMap[client_id] = tempId;
+        document.getElementById("chatForm").addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const user = document.getElementById("user").value;
+            const text = document.getElementById("message").value;
 
-    // emit to server with client id and client time
-    socket.emit('send_message', { client_id, text, time });
+            await fetch("/messages", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ user, text })
+            });
 
-    inputEl.value = '';
-    inputEl.focus();
-  }
+            document.getElementById("message").value = "";
+            await fetch("/typing", { 
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ typing: false })
+            });
+            loadMessages();
+        });
 
-  sendBtn.addEventListener('click', sendMessage);
-  inputEl.addEventListener('keydown', (e) => { if(e.key === 'Enter') sendMessage(); });
+        // detect typing
+        let typingTimeout;
+        document.getElementById("message").addEventListener("input", async () => {
+            await fetch("/typing", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ typing: true })
+            });
 
-  // mobile keyboard awareness (visualViewport)
-  if (window.visualViewport) {
-    const appEl = document.querySelector('.app');
-    window.visualViewport.addEventListener('resize', () => {
-      const offset = window.innerHeight - window.visualViewport.height;
-      if(offset > 150){
-        appEl.style.height = window.visualViewport.height + 'px';
-        scrollToBottom();
-      } else {
-        appEl.style.height = '100vh';
-      }
-    });
-  }
+            clearTimeout(typingTimeout);
+            typingTimeout = setTimeout(async () => {
+                await fetch("/typing", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ typing: false })
+                });
+            }, 2000);
+        });
 
-  // helper genClientId/localTime reused locally
-  function genClientId(){ return 'c_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,8); }
-  function localTime(){ const d=new Date(); return d.getHours().toString().padStart(2,'0') + ':' + d.getMinutes().toString().padStart(2,'0'); }
+        // mobile keyboard fix
+        window.addEventListener("resize", () => {
+            document.body.style.height = window.innerHeight + "px";
+        });
 
-  // initial focus
-  inputEl.focus();
-})();
-</script>
+        setInterval(loadMessages, 2000);
+        setInterval(checkTyping, 1000);
+        loadMessages();
+    </script>
 </body>
 </html>
