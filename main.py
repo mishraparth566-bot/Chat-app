@@ -1,6 +1,6 @@
 # main.py
 import eventlet
-eventlet.monkey_patch()  # MUST be first
+eventlet.monkey_patch()  # must be first
 
 import os
 import time
@@ -17,14 +17,12 @@ DB_PATH = "chat_db.json"
 db = TinyDB(DB_PATH)
 messages_table = db.table("messages")
 
-# mapping: sid -> client_id
-connected = {}
-# typing state
+# connections
+connected = {}  # sid -> client_id
 typing_set = set()
-typing_last_seen = {}  # client_id -> last typing timestamp
+typing_last_seen = {}
 typing_lock = Lock()
-
-TYPING_TIMEOUT = 1.2  # matches client-side timeout
+TYPING_TIMEOUT = 1.2
 
 
 @app.route("/")
@@ -37,11 +35,27 @@ def handle_join(data):
     client_id = data.get("client_id")
     sid = request.sid
     connected[sid] = client_id
-    # send existing messages to this client
+
+    # send all messages to client
     all_messages = messages_table.all()
     emit("load_messages", all_messages)
+
     # broadcast online count
     broadcast_online_count()
+
+    # mark all messages as delivered for this client
+    mark_delivered(client_id)
+
+
+def mark_delivered(client_id):
+    updated = []
+    for msg in messages_table.all():
+        if msg["client_id"] != client_id and msg.get("status") == "sent":
+            msg["status"] = "delivered"
+            messages_table.update({"status": "delivered"}, doc_ids=[msg.doc_id])
+            updated.append(msg)
+    if updated:
+        socketio.emit("update_messages", updated)
 
 
 @socketio.on("send_message")
@@ -52,10 +66,11 @@ def handle_send_message(data):
         return
 
     message = {
-        "id": datetime.utcnow().isoformat() + "_" + (client_id or "anon"),
+        "id": datetime.utcnow().isoformat() + "_" + client_id,
         "client_id": client_id,
         "text": text,
-        "time": datetime.utcnow().isoformat()
+        "time": datetime.utcnow().isoformat(),
+        "status": "sent"
     }
     messages_table.insert(message)
     socketio.emit("new_message", message)
@@ -76,13 +91,25 @@ def handle_typing(data):
             typing_set.discard(client_id)
             typing_last_seen.pop(client_id, None)
 
-    # broadcast only to others (not self)
     socketio.emit(
         "typing_update",
         {"typing_clients": list(typing_set)},
         broadcast=True,
         include_self=False
     )
+
+
+@socketio.on("mark_read")
+def handle_mark_read(data):
+    client_id = data.get("client_id")
+    updated = []
+    for msg in messages_table.all():
+        if msg["client_id"] != client_id and msg.get("status") != "read":
+            msg["status"] = "read"
+            messages_table.update({"status": "read"}, doc_ids=[msg.doc_id])
+            updated.append(msg)
+    if updated:
+        socketio.emit("update_messages", updated)
 
 
 @socketio.on("disconnect")
@@ -98,12 +125,11 @@ def handle_disconnect():
 
 
 def broadcast_online_count():
-    unique_clients = set(connected.values())
-    online_count = len(unique_clients)
+    online_count = len(set(connected.values()))
     socketio.emit("online_count", {"online": online_count})
 
 
-# background task: cleanup stale typing states
+# background cleanup
 def typing_cleaner():
     while True:
         now = time.time()
@@ -117,10 +143,9 @@ def typing_cleaner():
                 typing_last_seen.pop(cid, None)
         if expired:
             socketio.emit("typing_update", {"typing_clients": list(typing_set)}, broadcast=True)
-        eventlet.sleep(1)  # check every 1s
+        eventlet.sleep(1)
 
 
-# launch cleaner
 eventlet.spawn(typing_cleaner)
 
 if __name__ == "__main__":
