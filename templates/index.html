@@ -38,7 +38,6 @@
     const messagesEl = document.getElementById('messages');
     const messageInput = document.getElementById('messageInput');
     const inputForm = document.getElementById('inputForm');
-    const typingIndicator = document.getElementById('typingIndicator');
     const onlineLabel = document.getElementById('onlineLabel');
 
     let clientId = localStorage.getItem('client_id');
@@ -116,12 +115,6 @@
       socket.emit('join', { client_id: clientId });
     });
 
-    socket.on('typing_update', (data) => {
-      const typingClients = data.typing_clients || [];
-      const othersTyping = typingClients.length > 0;
-      typingIndicator.classList.toggle('hidden', !othersTyping);
-      if (othersTyping) scrollToBottom();
-    });
 
     socket.on('online_count', (data) => {
       const count = data.online || 0;
@@ -136,16 +129,7 @@
       messageInput.value = '';
       socket.emit('typing', { client_id: clientId, typing: false });
     });
-
-    let typingTimer = null;
-    messageInput.addEventListener('input', () => {
-      socket.emit('typing', { client_id: clientId, typing: true });
-      if (typingTimer) clearTimeout(typingTimer);
-      typingTimer = setTimeout(() => {
-        socket.emit('typing', { client_id: clientId, typing: false });
-      }, 1200);
-    });
-
+    
     window.addEventListener('resize', () => {
       document.body.style.height = window.innerHeight + 'px';
       scrollToBottom();
