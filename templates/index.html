@@ -1,82 +1,47 @@
   <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Private Chat</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-    <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chat</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-    <div class="chat-container">
-        <div id="chat-box"></div>
+  <div class="chat-container">
+    <div id="messages" class="messages"></div>
 
-        <!-- Typing indicator -->
-        <div id="typing-indicator" class="typing hidden">
-            <span></span><span></span><span></span>
-        </div>
+    <form id="chat-form" class="chat-form">
+      <input type="text" id="message" placeholder="Message..." autocomplete="off" required>
+      <button type="submit">➤</button>
+    </form>
+  </div>
 
-        <form id="chatForm">
-            <input type="text" id="user" placeholder="Your name" required>
-            <div class="input-wrapper">
-                <input type="text" id="message" placeholder="Message..." required>
-                <button type="submit">➤</button>
-            </div>
-        </form>
-    </div>
+  <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+  <script>
+    const socket = io();
+    const form = document.getElementById('chat-form');
+    const input = document.getElementById('message');
+    const messages = document.getElementById('messages');
 
-    <script>
-        const socket = io();
+    // Receive message
+    socket.on('message', (msg) => {
+      const div = document.createElement('div');
+      div.classList.add('message', 'sent'); // You can adjust classes
+      div.textContent = msg;
+      messages.appendChild(div);
 
-        const chatBox = document.getElementById("chat-box");
-        const typingIndicator = document.getElementById("typing-indicator");
-        const userField = document.getElementById("user");
-        const messageField = document.getElementById("message");
+      // Auto scroll to bottom
+      messages.scrollTop = messages.scrollHeight;
+    });
 
-        document.getElementById("chatForm").addEventListener("submit", (e) => {
-            e.preventDefault();
-            const user = userField.value.trim();
-            const text = messageField.value.trim();
-            if (!user || !text) return;
-
-            socket.emit("send_message", { user, text });
-            messageField.value = "";
-        });
-
-        socket.on("receive_message", (data) => {
-            const div = document.createElement("div");
-            div.classList.add("bubble");
-            if (data.user === userField.value) {
-                div.classList.add("mine");
-            } else {
-                div.classList.add("theirs");
-            }
-            div.textContent = `${data.text}`;
-            chatBox.appendChild(div);
-            chatBox.scrollTop = chatBox.scrollHeight;
-        });
-
-        // typing events
-        let typingTimeout;
-        messageField.addEventListener("input", () => {
-            socket.emit("typing", { typing: true });
-            clearTimeout(typingTimeout);
-            typingTimeout = setTimeout(() => {
-                socket.emit("typing", { typing: false });
-            }, 1500);
-        });
-
-        socket.on("typing", (data) => {
-            if (data.typing) {
-                typingIndicator.classList.remove("hidden");
-                chatBox.scrollTop = chatBox.scrollHeight;
-            } else {
-                typingIndicator.classList.add("hidden");
-            }
-        });
-
-        // Mobile keyboard fix
-        window.addEventListener("resize", () => {
-            document.body.style.height = window.innerHeight + "px";
-        });
-    </script>
+    // Send message
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      if (input.value.trim() !== '') {
+        socket.emit('message', input.value);
+        input.value = '';
+      }
+    });
+  </script>
 </body>
 </html>
