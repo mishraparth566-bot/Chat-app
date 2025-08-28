@@ -1,17 +1,66 @@
-from flask import Flask, render_template, request
+import time
+import uuid
+import sqlite3
+from flask import Flask, render_template
 from flask_socketio import SocketIO, emit
-import time, uuid, eventlet
-from threading import Lock
+from eventlet import monkey_patch
+
+monkey_patch()  # fix monkey-eventlet error
 
 app = Flask(__name__)
 socketio = SocketIO(app, cors_allowed_origins="*")
 
-connected = {}
-typing_set = set()
-typing_last_seen = {}
-typing_lock = Lock()
+DB_FILE = "chat.db"
 
-TYPING_TIMEOUT = 1.2  # seconds
+
+# ----------------- Database -----------------
+def init_db():
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("""CREATE TABLE IF NOT EXISTS messages (
+                    id TEXT PRIMARY KEY,
+                    client_id TEXT,
+                    text TEXT,
+                    timestamp INTEGER,
+                    status TEXT
+                )""")
+    conn.commit()
+    conn.close()
+
+
+def save_message(msg_id, client_id, text, timestamp, status="sent"):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("INSERT INTO messages VALUES (?, ?, ?, ?, ?)", (msg_id, client_id, text, timestamp, status))
+    conn.commit()
+    conn.close()
+
+
+def update_status(msg_id, status):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("UPDATE messages SET status=? WHERE id=?", (status, msg_id))
+    conn.commit()
+    conn.close()
+
+
+def get_messages():
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("SELECT * FROM messages ORDER BY timestamp ASC")
+    rows = c.fetchall()
+    conn.close()
+    return [
+        {"id": r[0], "client_id": r[1], "text": r[2], "timestamp": r[3], "status": r[4]}
+        for r in rows
+    ]
+
+
+init_db()
+
+
+# ----------------- Online Tracking -----------------
+online_users = set()
 
 
 @app.route("/")
@@ -19,88 +68,55 @@ def index():
     return render_template("index.html")
 
 
-# ----------------- Typing -----------------
-@socketio.on("typing")
-def handle_typing(data):
-    client_id = data.get("client_id")
-    is_typing = bool(data.get("typing", False))
-    if not client_id:
-        return
-
-    with typing_lock:
-        if is_typing:
-            typing_set.add(client_id)
-            typing_last_seen[client_id] = time.time()
-        else:
-            typing_set.discard(client_id)
-            typing_last_seen.pop(client_id, None)
-
-    socketio.emit(
-        "typing_update",
-        {"typing_clients": list(typing_set)},
-        broadcast=True,
-        include_self=False,
-    )
+@socketio.on("connect")
+def handle_connect():
+    online_users.add(request.sid)
+    if len(online_users) > 1:
+        socketio.emit("online_status", {"status": "Online"}, broadcast=True)
+    emit("chat_history", get_messages())  # send chat history
 
 
-def typing_cleaner():
-    while True:
-        now = time.time()
-        expired = []
-        with typing_lock:
-            for cid, ts in list(typing_last_seen.items()):
-                if now - ts > TYPING_TIMEOUT:
-                    expired.append(cid)
-            for cid in expired:
-                typing_set.discard(cid)
-                typing_last_seen.pop(cid, None)
-        if expired:
-            socketio.emit("typing_update", {"typing_clients": list(typing_set)}, broadcast=True)
-        eventlet.sleep(1)
+@socketio.on("disconnect")
+def handle_disconnect():
+    online_users.discard(request.sid)
+    if len(online_users) <= 1:
+        socketio.emit("online_status", {"status": ""}, broadcast=True)
 
 
-eventlet.spawn(typing_cleaner)
-
-
-# ----------------- Messaging + Receipts -----------------
+# ----------------- Messaging -----------------
 @socketio.on("send_message")
 def handle_message(data):
     client_id = data.get("client_id")
     text = data.get("text")
-    if not client_id or not text:
+    if not text:
         return
 
     msg_id = str(uuid.uuid4())
     timestamp = int(time.time())
+
+    save_message(msg_id, client_id, text, timestamp, status="sent")
 
     socketio.emit("new_message", {
         "id": msg_id,
         "client_id": client_id,
         "text": text,
         "timestamp": timestamp,
+        "status": "sent"
     }, broadcast=True)
+
+
+@socketio.on("message_received")
+def handle_received(data):
+    msg_id = data.get("message_id")
+    update_status(msg_id, "received")
+    socketio.emit("message_status", {"message_id": msg_id, "status": "received"}, broadcast=True)
 
 
 @socketio.on("message_read")
 def handle_read(data):
-    message_id = data.get("message_id")
-    if not message_id:
-        return
-    socketio.emit("message_read_update", {
-        "message_id": message_id
-    }, broadcast=True)
-
-
-# ----------------- Disconnect -----------------
-@socketio.on("disconnect")
-def handle_disconnect():
-    sid = request.sid
-    client_id = connected.pop(sid, None)
-    if client_id:
-        with typing_lock:
-            typing_set.discard(client_id)
-            typing_last_seen.pop(client_id, None)
-    socketio.emit("typing_update", {"typing_clients": list(typing_set)}, broadcast=True)
+    msg_id = data.get("message_id")
+    update_status(msg_id, "read")
+    socketio.emit("message_status", {"message_id": msg_id, "status": "read"}, broadcast=True)
 
 
 if __name__ == "__main__":
