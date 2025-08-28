@@ -54,24 +54,56 @@
       const emojiRegex = /^(?:\p{Emoji_Presentation}|\p{Emoji}\uFE0F|\p{Emoji_Modifier_Base})+$/u;
       try { return emojiRegex.test(str.trim()); } catch(e) { return false; }
     }
+    
+function formatTimestamp(isoStr) {
+  const msgDate = new Date(isoStr);
+  const now = new Date();
 
+  const sameDay = msgDate.toDateString() === now.toDateString();
+  
+  const yesterday = new Date();
+  yesterday.setDate(now.getDate() - 1);
+  const isYesterday = msgDate.toDateString() === yesterday.toDateString();
+
+  let timeStr = msgDate.toLocaleTimeString("en-IN", {
+    hour: "2-digit", minute: "2-digit", hour12: true
+  });
+
+  if (sameDay) {
+    return timeStr;
+  } else if (isYesterday) {
+    return "Yesterday " + timeStr;
+  } else {
+    return msgDate.toLocaleDateString("en-IN", { day: "numeric", month: "short" }) + ", " + timeStr;
+  }
+}
     function renderMessage(msg) {
-      const div = document.createElement('div');
-      div.classList.add('msg-bubble');
-      const mine = msg.client_id === clientId;
-      div.classList.add(mine ? 'mine' : 'theirs');
+  const div = document.createElement('div');
+  div.classList.add('msg-bubble');
+  const mine = msg.client_id === clientId;
+  div.classList.add(mine ? 'mine' : 'theirs');
 
-      if (isOnlyEmoji(msg.text)) {
-        const span = document.createElement('div');
-        span.className = 'emoji-standalone';
-        span.textContent = msg.text;
-        div.appendChild(span);
-      } else {
-        const span = document.createElement('div');
-        span.className = 'msg-text';
-        span.textContent = msg.text;
-        div.appendChild(span);
-      }
+  // 🔹 text or emoji
+  if (isOnlyEmoji(msg.text)) {
+    const span = document.createElement('div');
+    span.className = 'emoji-standalone';
+    span.textContent = msg.text;
+    div.appendChild(span);
+  } else {
+    const span = document.createElement('div');
+    span.className = 'msg-text';
+    span.textContent = msg.text;
+    div.appendChild(span);
+  }
+
+  // 🔹 timestamp
+  const ts = document.createElement('div');
+  ts.className = 'msg-time';
+  ts.textContent = formatTimestamp(msg.time); // use helper
+  div.appendChild(ts);
+
+  messages.appendChild(div);
+    }
 
       // timestamp + receipts
       const meta = document.createElement('div');
