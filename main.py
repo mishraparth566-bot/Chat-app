@@ -8,10 +8,8 @@ from threading import Lock
 from flask import Flask, render_template, request
 from flask_socketio import SocketIO, emit
 from tinydb import TinyDB
-from datetime import datetime
 from datetime import datetime, timedelta, timezone
 
-IST = timezone(timedelta(hours=5, minutes=30))
 app = Flask(__name__)
 socketio = SocketIO(app, async_mode="eventlet", cors_allowed_origins="*")
 
@@ -25,6 +23,9 @@ typing_set = set()
 typing_last_seen = {}
 typing_lock = Lock()
 TYPING_TIMEOUT = 1.2
+
+# Indian Standard Time (UTC+5:30)
+IST = timezone(timedelta(hours=5, minutes=30))
 
 
 @app.route("/")
@@ -66,15 +67,16 @@ def handle_send_message(data):
     text = data.get("text", "").strip()
     if not text:
         return
-now_ist = datetime.now(IST)
 
-message = {
-    "id": now_ist.isoformat() + "_" + (client_id or "anon"),
-    "client_id": client_id,
-    "text": text,
-    "time": now_ist.isoformat()  # save full IST timestamp
-}
-    
+    # Use IST for timestamp
+    now_ist = datetime.now(IST)
+    message = {
+        "id": now_ist.isoformat() + "_" + client_id,
+        "client_id": client_id,
+        "text": text,
+        "time": now_ist.isoformat(),  # save in IST
+        "status": "sent"
+    }
     messages_table.insert(message)
     socketio.emit("new_message", message)
 
