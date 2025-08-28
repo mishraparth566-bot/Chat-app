@@ -1,30 +1,17 @@
-# main.py
-import eventlet
-eventlet.monkey_patch()  # MUST be first
-
-import os
-import time
-from threading import Lock
 from flask import Flask, render_template, request
 from flask_socketio import SocketIO, emit
-from tinydb import TinyDB
-from datetime import datetime
+import time, uuid, eventlet
+from threading import Lock
 
 app = Flask(__name__)
-socketio = SocketIO(app, async_mode="eventlet", cors_allowed_origins="*")
+socketio = SocketIO(app, cors_allowed_origins="*")
 
-DB_PATH = "chat_db.json"
-db = TinyDB(DB_PATH)
-messages_table = db.table("messages")
-
-# mapping: sid -> client_id
-connected = {}
-# typing state
-typing_set = set()
-typing_last_seen = {}  # client_id -> last typing timestamp
+connected = {}            # sid -> client_id
+typing_set = set()        # who is typing
+typing_last_seen = {}     # client_id -> last typing timestamp
 typing_lock = Lock()
 
-TYPING_TIMEOUT = 1.2  # matches client-side timeout
+TYPING_TIMEOUT = 1.2  # seconds (matches frontend timeout)
 
 
 @app.route("/")
@@ -32,35 +19,7 @@ def index():
     return render_template("index.html")
 
 
-@socketio.on("join")
-def handle_join(data):
-    client_id = data.get("client_id")
-    sid = request.sid
-    connected[sid] = client_id
-    # send existing messages to this client
-    all_messages = messages_table.all()
-    emit("load_messages", all_messages)
-    # broadcast online count
-    broadcast_online_count()
-
-
-@socketio.on("send_message")
-def handle_send_message(data):
-    client_id = data.get("client_id")
-    text = data.get("text", "").strip()
-    if not text:
-        return
-
-    message = {
-        "id": datetime.utcnow().isoformat() + "_" + (client_id or "anon"),
-        "client_id": client_id,
-        "text": text,
-        "time": datetime.utcnow().isoformat()
-    }
-    messages_table.insert(message)
-    socketio.emit("new_message", message)
-
-
+# ----------------- Typing Indicator -----------------
 @socketio.on("typing")
 def handle_typing(data):
     client_id = data.get("client_id")
@@ -76,34 +35,14 @@ def handle_typing(data):
             typing_set.discard(client_id)
             typing_last_seen.pop(client_id, None)
 
-    # broadcast only to others (not self)
     socketio.emit(
         "typing_update",
         {"typing_clients": list(typing_set)},
         broadcast=True,
-        include_self=False
+        include_self=False,
     )
 
 
-@socketio.on("disconnect")
-def handle_disconnect():
-    sid = request.sid
-    client_id = connected.pop(sid, None)
-    if client_id:
-        with typing_lock:
-            typing_set.discard(client_id)
-            typing_last_seen.pop(client_id, None)
-    broadcast_online_count()
-    socketio.emit("typing_update", {"typing_clients": list(typing_set)}, broadcast=True)
-
-
-def broadcast_online_count():
-    unique_clients = set(connected.values())
-    online_count = len(unique_clients)
-    socketio.emit("online_count", {"online": online_count})
-
-
-# background task: cleanup stale typing states
 def typing_cleaner():
     while True:
         now = time.time()
@@ -117,12 +56,52 @@ def typing_cleaner():
                 typing_last_seen.pop(cid, None)
         if expired:
             socketio.emit("typing_update", {"typing_clients": list(typing_set)}, broadcast=True)
-        eventlet.sleep(1)  # check every 1s
+        eventlet.sleep(1)
 
 
-# launch cleaner
 eventlet.spawn(typing_cleaner)
 
+
+# ----------------- Messaging + Receipts -----------------
+@socketio.on("send_message")
+def handle_message(data):
+    client_id = data.get("client_id")
+    text = data.get("text")
+    if not client_id or not text:
+        return
+
+    msg_id = str(uuid.uuid4())
+    timestamp = int(time.time())
+
+    socketio.emit("new_message", {
+        "id": msg_id,
+        "client_id": client_id,
+        "text": text,
+        "timestamp": timestamp,
+    }, broadcast=True)
+
+
+@socketio.on("message_read")
+def handle_read(data):
+    message_id = data.get("message_id")
+    if not message_id:
+        return
+    socketio.emit("message_read_update", {
+        "message_id": message_id
+    }, broadcast=True)
+
+
+# ----------------- Disconnect Handling -----------------
+@socketio.on("disconnect")
+def handle_disconnect():
+    sid = request.sid
+    client_id = connected.pop(sid, None)
+    if client_id:
+        with typing_lock:
+            typing_set.discard(client_id)
+            typing_last_seen.pop(client_id, None)
+    socketio.emit("typing_update", {"typing_clients": list(typing_set)}, broadcast=True)
+
+
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-    socketio.run(app, host="0.0.0.0", port=port)
+    socketio.run(app, debug=True)
