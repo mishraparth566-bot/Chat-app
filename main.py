@@ -6,12 +6,12 @@ from threading import Lock
 app = Flask(__name__)
 socketio = SocketIO(app, cors_allowed_origins="*")
 
-connected = {}            # sid -> client_id
-typing_set = set()        # who is typing
-typing_last_seen = {}     # client_id -> last typing timestamp
+connected = {}
+typing_set = set()
+typing_last_seen = {}
 typing_lock = Lock()
 
-TYPING_TIMEOUT = 1.2  # seconds (matches frontend timeout)
+TYPING_TIMEOUT = 1.2  # seconds
 
 
 @app.route("/")
@@ -19,7 +19,7 @@ def index():
     return render_template("index.html")
 
 
-# ----------------- Typing Indicator -----------------
+# ----------------- Typing -----------------
 @socketio.on("typing")
 def handle_typing(data):
     client_id = data.get("client_id")
@@ -91,7 +91,7 @@ def handle_read(data):
     }, broadcast=True)
 
 
-# ----------------- Disconnect Handling -----------------
+# ----------------- Disconnect -----------------
 @socketio.on("disconnect")
 def handle_disconnect():
     sid = request.sid
