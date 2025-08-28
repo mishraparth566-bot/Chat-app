@@ -1,11 +1,11 @@
+import eventlet
+eventlet.monkey_patch()   # ✅ must come first before any other imports
+
 import time
 import uuid
 import sqlite3
 from flask import Flask, render_template, request
-from flask_socketio import SocketIO, emit
-from eventlet import monkey_patch
-
-monkey_patch()  # fix monkey-eventlet error
+from flask_socketio import SocketIO
 
 app = Flask(__name__)
 socketio = SocketIO(app, cors_allowed_origins="*")
@@ -73,7 +73,7 @@ def handle_connect():
     online_users.add(request.sid)
     if len(online_users) > 1:
         socketio.emit("online_status", {"status": "Online"}, broadcast=True)
-    emit("chat_history", get_messages())  # send chat history
+    socketio.emit("chat_history", get_messages(), to=request.sid)
 
 
 @socketio.on("disconnect")
