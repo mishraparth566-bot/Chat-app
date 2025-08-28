@@ -1,49 +1,28 @@
-from flask import Flask, render_template, request, jsonify
+import eventlet
+eventlet.monkey_patch()
+
+from flask import Flask, render_template, request
+from flask_socketio import SocketIO, emit
 from tinydb import TinyDB
-from datetime import datetime
 
 app = Flask(__name__)
+socketio = SocketIO(app, cors_allowed_origins="*")
+
 db = TinyDB("chat_db.json")
 messages_table = db.table("messages")
-
-# simple global typing status
-typing_status = {"typing": False}
 
 @app.route("/")
 def index():
     return render_template("index.html")
 
-@app.route("/messages", methods=["GET"])
-def get_messages():
-    return jsonify(messages_table.all())
+@socketio.on("send_message")
+def handle_send_message(data):
+    messages_table.insert({"user": data["user"], "text": data["text"]})
+    emit("receive_message", data, broadcast=True)
 
-@app.route("/messages", methods=["POST"])
-def add_message():
-    data = request.get_json()
-    user = data.get("user")
-    text = data.get("text")
-
-    if not user or not text:
-        return jsonify({"error": "User and text required"}), 400
-
-    new_message = {
-        "user": user,
-        "text": text,
-        "time": datetime.utcnow().isoformat()
-    }
-    messages_table.insert(new_message)
-    return jsonify(new_message), 201
-
-# typing indicator routes
-@app.route("/typing", methods=["POST"])
-def set_typing():
-    data = request.get_json()
-    typing_status["typing"] = bool(data.get("typing"))
-    return jsonify({"status": "ok"})
-
-@app.route("/typing", methods=["GET"])
-def get_typing():
-    return jsonify(typing_status)
+@socketio.on("typing")
+def handle_typing(data):
+    emit("typing", data, broadcast=True, include_self=False)
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    socketio.run(app, host="0.0.0.0", port=5000)
