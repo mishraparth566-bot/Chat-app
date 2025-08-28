@@ -66,14 +66,15 @@ def handle_send_message(data):
     text = data.get("text", "").strip()
     if not text:
         return
+now_ist = datetime.now(IST)
 
-    message = {
-        "id": datetime.utcnow().isoformat() + "_" + client_id,
-        "client_id": client_id,
-        "text": text,
-        "time": datetime.utcnow().isoformat(),
-        "status": "sent"
-    }
+message = {
+    "id": now_ist.isoformat() + "_" + (client_id or "anon"),
+    "client_id": client_id,
+    "text": text,
+    "time": now_ist.isoformat()  # save full IST timestamp
+}
+    
     messages_table.insert(message)
     socketio.emit("new_message", message)
 
