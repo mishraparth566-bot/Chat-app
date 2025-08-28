@@ -3,6 +3,8 @@ import eventlet
 eventlet.monkey_patch()  # MUST be first
 
 import os
+import time
+from threading import Lock
 from flask import Flask, render_template, request
 from flask_socketio import SocketIO, emit
 from tinydb import TinyDB
@@ -17,18 +19,21 @@ messages_table = db.table("messages")
 
 # mapping: sid -> client_id
 connected = {}
-# typing set: set of client_id currently typing
+# typing state
 typing_set = set()
+typing_last_seen = {}  # client_id -> last typing timestamp
+typing_lock = Lock()
+
+TYPING_TIMEOUT = 1.2  # matches client-side timeout
+
 
 @app.route("/")
 def index():
     return render_template("index.html")
 
+
 @socketio.on("join")
 def handle_join(data):
-    """
-    data: { client_id: <string> }
-    """
     client_id = data.get("client_id")
     sid = request.sid
     connected[sid] = client_id
@@ -38,11 +43,9 @@ def handle_join(data):
     # broadcast online count
     broadcast_online_count()
 
+
 @socketio.on("send_message")
 def handle_send_message(data):
-    """
-    data: { client_id: <string>, text: <string> }
-    """
     client_id = data.get("client_id")
     text = data.get("text", "").strip()
     if not text:
@@ -55,44 +58,70 @@ def handle_send_message(data):
         "time": datetime.utcnow().isoformat()
     }
     messages_table.insert(message)
-    # broadcast the message to all
     socketio.emit("new_message", message)
+
 
 @socketio.on("typing")
 def handle_typing(data):
-    """
-    data: { client_id: <string>, typing: bool }
-    We'll update typing_set and broadcast an aggregate status that indicates whether ANY other user is typing.
-    """
     client_id = data.get("client_id")
     is_typing = bool(data.get("typing", False))
-
     if not client_id:
         return
 
-    if is_typing:
-        typing_set.add(client_id)
-    else:
-        typing_set.discard(client_id)
+    with typing_lock:
+        if is_typing:
+            typing_set.add(client_id)
+            typing_last_seen[client_id] = time.time()
+        else:
+            typing_set.discard(client_id)
+            typing_last_seen.pop(client_id, None)
 
-    # Broadcast typing info: server will send which client_ids are typing (small set)
-    socketio.emit("typing_update", {"typing_clients": list(typing_set)})
+    # broadcast only to others (not self)
+    socketio.emit(
+        "typing_update",
+        {"typing_clients": list(typing_set)},
+        broadcast=True,
+        include_self=False
+    )
+
 
 @socketio.on("disconnect")
 def handle_disconnect():
     sid = request.sid
     client_id = connected.pop(sid, None)
-    if client_id and client_id in typing_set:
-        typing_set.discard(client_id)
+    if client_id:
+        with typing_lock:
+            typing_set.discard(client_id)
+            typing_last_seen.pop(client_id, None)
     broadcast_online_count()
-    # update typing_set broadcast
-    socketio.emit("typing_update", {"typing_clients": list(typing_set)})
+    socketio.emit("typing_update", {"typing_clients": list(typing_set)}, broadcast=True)
+
 
 def broadcast_online_count():
-    # number of unique connected client_ids
     unique_clients = set(connected.values())
     online_count = len(unique_clients)
     socketio.emit("online_count", {"online": online_count})
+
+
+# background task: cleanup stale typing states
+def typing_cleaner():
+    while True:
+        now = time.time()
+        expired = []
+        with typing_lock:
+            for cid, ts in list(typing_last_seen.items()):
+                if now - ts > TYPING_TIMEOUT:
+                    expired.append(cid)
+            for cid in expired:
+                typing_set.discard(cid)
+                typing_last_seen.pop(cid, None)
+        if expired:
+            socketio.emit("typing_update", {"typing_clients": list(typing_set)}, broadcast=True)
+        eventlet.sleep(1)  # check every 1s
+
+
+# launch cleaner
+eventlet.spawn(typing_cleaner)
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
