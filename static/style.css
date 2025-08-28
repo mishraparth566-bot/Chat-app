@@ -53,7 +53,7 @@ html,body{height:100%;margin:0;background:var(--bg);color:var(--white);font-fami
   font-size:48px;line-height:1;text-align:center;padding:6px 0;
 }
 
-/* typing indicator (IG-like) */
+/* typing indicator */
 .typing{
   display:flex;align-items:center;padding:8px 12px;margin:0 14px 8px;border-radius:18px;background:var(--bubble-them);width:fit-content;
 }
@@ -65,19 +65,13 @@ html,body{height:100%;margin:0;background:var(--bg);color:var(--white);font-fami
 /* input area */
 .input-form{
   display:flex;align-items:center;gap:10px;padding:10px;background:linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.02));border-top:1px solid rgba(255,255,255,0.03);
-  position:relative; /* stays at bottom */
+  position:relative;
 }
-.emoji-btn{background:transparent;border:none;font-size:22px;padding:6px;border-radius:8px;color:var(--white);cursor:pointer}
 .input-wrapper{flex:1}
 .input-wrapper input{
   width:100%;padding:12px 14px;border-radius:24px;border:none;background:#151515;color:var(--white);font-size:16px;outline:none;
 }
 .send-btn{background:transparent;border:none;color:var(--accent);font-size:20px;padding:8px;border-radius:50%;cursor:pointer}
-
-/* emoji picker */
-.emoji-picker{position:fixed;left:12px;right:12px;bottom:74px;margin:auto;max-width:720px;background:transparent;display:flex;justify-content:center}
-.emoji-grid{display:flex;flex-wrap:wrap;gap:8px;padding:8px;background:transparent;width:100%;justify-content:center}
-.emoji-item{background:#161616;border:none;border-radius:12px;padding:10px 12px;font-size:22px;color:var(--white);cursor:pointer}
 
 /* responsive tweaks */
 @media (max-width:480px){
