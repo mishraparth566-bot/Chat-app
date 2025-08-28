@@ -12,15 +12,16 @@ body {
 }
 
 #header {
-  padding: 12px;
+  padding: 16px;
   background: #111;
   border-bottom: 1px solid #222;
   text-align: center;
   font-weight: bold;
+  font-size: 18px;
 }
 
 #online {
-  font-size: 12px;
+  font-size: 14px;
   color: #4cd964;
   margin-left: 8px;
 }
@@ -28,109 +29,81 @@ body {
 .messages {
   flex: 1;
   overflow-y: auto;
-  padding: 10px;
+  padding: 14px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 10px;
 }
 
 .message {
-  max-width: 70%;
-  padding: 8px 12px;
-  border-radius: 18px;
+  max-width: 80%;
+  padding: 12px 16px;
+  border-radius: 20px;
   word-wrap: break-word;
+  font-size: 16px;
+  line-height: 1.4;
 }
 
 .mine {
   align-self: flex-end;
   background: #007aff;
   color: white;
-  border-bottom-right-radius: 4px;
+  border-bottom-right-radius: 6px;
 }
 
 .theirs {
   align-self: flex-start;
   background: #333;
-  border-bottom-left-radius: 4px;
+  border-bottom-left-radius: 6px;
 }
 
 .text.emoji-big {
-  font-size: 40px;
+  font-size: 48px;
   text-align: center;
 }
 
 .meta {
-  font-size: 11px;
+  font-size: 12px;
   display: flex;
   justify-content: flex-end;
-  gap: 6px;
-  margin-top: 2px;
+  gap: 8px;
+  margin-top: 4px;
   color: #aaa;
 }
 
 .status {
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .time {
-  font-size: 11px;
+  font-size: 12px;
 }
-
-/* typing */
-.typing {
-  display: flex;
-  align-items: center;
-  padding: 8px 12px;
-  margin: 6px 12px;
-  border-radius: 14px;
-  background: #333;
-  width: fit-content;
-}
-
-.typing span {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: #9b9b9b;
-  margin: 0 2px;
-  display: inline-block;
-  animation: typing-bounce 1s infinite;
-}
-
-.typing span:nth-child(2) { animation-delay: 0.15s; }
-.typing span:nth-child(3) { animation-delay: 0.3s; }
-
-@keyframes typing-bounce {
-  0%, 80%, 100% { transform: scale(0.6); }
-  40% { transform: scale(1); }
-}
-
-.hidden { display: none !important; }
 
 /* form */
 .form {
   display: flex;
   border-top: 1px solid #222;
-  padding: 8px;
+  padding: 10px;
   background: #111;
 }
 
 #input {
   flex: 1;
-  padding: 10px;
-  border-radius: 20px;
+  padding: 14px;
+  border-radius: 24px;
   border: none;
   outline: none;
-  font-size: 14px;
+  font-size: 16px;
 }
 
 .send-btn {
-  margin-left: 8px;
-  padding: 0 14px;
+  margin-left: 10px;
+  padding: 0 18px;
   border: none;
-  border-radius: 20px;
+  border-radius: 24px;
   background: #007aff;
   color: white;
   font-weight: bold;
+  font-size: 15px;
   cursor: pointer;
 }
