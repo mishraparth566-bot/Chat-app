@@ -1,99 +1,101 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
   <meta charset="UTF-8">
-  <title>Chat Room</title>
+  <title>Chat</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 </head>
 <body>
   <div class="chat-container">
-    <div id="header">Chat Room <span id="online"></span></div>
-
-    <div id="messages" class="messages"></div>
-
-    <div id="typingIndicator" class="typing hidden">
-      <span></span><span></span><span></span>
+    <div id="header">
+      Chat Room <span id="online"></span>
     </div>
-
+    <div class="messages" id="messages"></div>
     <form id="form" class="form">
-      <input id="input" autocomplete="off" placeholder="Type a message...">
-      <button class="send-btn">Send</button>
+      <input id="input" autocomplete="off" placeholder="Type a message..." />
+      <button type="submit" class="send-btn">Send</button>
     </form>
   </div>
 
-<script>
-const socket = io();
-const messages = document.getElementById("messages");
-const form = document.getElementById("form");
-const input = document.getElementById("input");
-const typingIndicator = document.getElementById("typingIndicator");
-const onlineLabel = document.getElementById("online");
+  <script>
+    const socket = io();
+    const form = document.getElementById('form');
+    const input = document.getElementById('input');
+    const messages = document.getElementById('messages');
+    const online = document.getElementById('online');
 
-const client_id = Math.random().toString(36).substring(2, 9);
+    const clientId = Math.random().toString(36).substring(2, 9);
 
-// ----------------- Online -----------------
-socket.on("online_status", data => {
-  onlineLabel.textContent = data.status || "";
-});
+    function formatTime(ts) {
+      const d = new Date(ts * 1000);
+      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
 
-// ----------------- History -----------------
-socket.on("chat_history", (msgs) => {
-  messages.innerHTML = "";
-  msgs.forEach(addMessage);
-});
+    function renderMessage(msg) {
+      let div = document.createElement('div');
+      div.classList.add('message');
+      div.classList.add(msg.client_id === clientId ? 'mine' : 'theirs');
 
-// ----------------- Send -----------------
-form.addEventListener("submit", (e) => {
-  e.preventDefault();
-  const text = input.value.trim();
-  if (!text) return;
-  socket.emit("send_message", { client_id, text });
-  input.value = "";
-});
+      // Check for standalone emoji
+      const isEmoji = /^[\p{Emoji}\u200d]+$/u.test(msg.text.trim());
 
-// ----------------- New messages -----------------
-socket.on("new_message", (msg) => {
-  addMessage(msg);
+      div.innerHTML = `
+        <div class="text ${isEmoji ? 'emoji-big' : ''}">${msg.text}</div>
+        <div class="meta">
+          <span class="time">${formatTime(msg.timestamp)}</span>
+          ${msg.client_id === clientId ? 
+            `<span class="status">
+              ${msg.status === 'sent' ? '✓' : 
+                msg.status === 'received' ? '✓✓' : 
+                msg.status === 'read' ? '<span style="color:#007aff">✓✓</span>' : ''}
+            </span>` : ''
+          }
+        </div>
+      `;
+      messages.appendChild(div);
+      messages.scrollTop = messages.scrollHeight;
+    }
 
-  if (msg.client_id !== client_id) {
-    socket.emit("message_received", { message_id: msg.id });
-    setTimeout(() => socket.emit("message_read", { message_id: msg.id }), 1000);
-  }
-});
+    // Send message
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      if (input.value) {
+        socket.emit("send_message", { client_id: clientId, text: input.value });
+        input.value = "";
+      }
+    });
 
-socket.on("message_status", (data) => {
-  const el = document.querySelector(`[data-id="${data.message_id}"] .status`);
-  if (el) {
-    if (data.status === "sent") el.textContent = "✓";
-    if (data.status === "received") { el.textContent = "✓✓"; el.style.color = "gray"; }
-    if (data.status === "read") { el.textContent = "✓✓"; el.style.color = "#007aff"; }
-  }
-});
+    // Load old messages
+    socket.on("chat_history", (history) => {
+      messages.innerHTML = "";
+      history.forEach(renderMessage);
+    });
 
-// ----------------- Render -----------------
-function addMessage(msg) {
-  const isMine = msg.client_id === client_id;
-  const bubble = document.createElement("div");
-  bubble.className = `message ${isMine ? "mine" : "theirs"}`;
-  bubble.dataset.id = msg.id;
+    // New incoming message
+    socket.on("new_message", (msg) => {
+      renderMessage(msg);
+      if (msg.client_id !== clientId) {
+        socket.emit("message_received", { message_id: msg.id });
+        // auto-mark as read for demo
+        socket.emit("message_read", { message_id: msg.id });
+      }
+    });
 
-  const time = new Date(msg.timestamp * 1000)
-                .toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    // Update read receipts
+    socket.on("message_status", (data) => {
+      let last = messages.querySelectorAll('.mine .status');
+      if (last.length > 0) {
+        let el = last[last.length - 1];
+        if (data.status === "received") el.textContent = "✓✓";
+        if (data.status === "read") el.innerHTML = '<span style="color:#007aff">✓✓</span>';
+      }
+    });
 
-  const isEmojiOnly = /^(\p{Emoji}|\s)+$/u.test(msg.text);
-
-  bubble.innerHTML = `
-    <div class="text ${isEmojiOnly ? "emoji-big" : ""}">${msg.text}</div>
-    <div class="meta">
-      <span class="time">${time}</span>
-      ${isMine ? `<span class="status">${msg.status === "sent" ? "✓" : ""}</span>` : ""}
-    </div>
-  `;
-
-  messages.appendChild(bubble);
-  messages.scrollTop = messages.scrollHeight;
-}
-</script>
+    // Online status
+    socket.on("online_status", (data) => {
+      online.textContent = data.status;
+    });
+  </script>
 </body>
 </html>
