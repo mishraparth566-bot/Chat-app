@@ -1,7 +1,7 @@
 import time
 import uuid
 import sqlite3
-from flask import Flask, render_template
+from flask import Flask, render_template, request
 from flask_socketio import SocketIO, emit
 from eventlet import monkey_patch
 
