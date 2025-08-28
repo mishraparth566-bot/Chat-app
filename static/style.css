@@ -25,7 +25,9 @@ html,body{height:100%;margin:0;background:var(--bg);color:var(--white);font-fami
 .chat-title{font-weight:600;font-size:17px}
 .icon.back{background:transparent;border:none;color:var(--white);font-size:18px;cursor:pointer}
 .online{font-size:13px;color:#4cd137;padding:4px 8px;border-radius:12px;background:rgba(76,209,55,0.08)}
-.hidden{display:none}
+
+/* this ensures hidden always wins */
+.hidden{display:none !important}
 
 /* main chat area */
 .chat-area{flex:1;display:flex;flex-direction:column;overflow:hidden;background:transparent}
